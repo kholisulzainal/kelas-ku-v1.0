@@ -1,0 +1,8 @@
+{
+  "name": "Kelas Ku - Pengelolaan Kelas",
+  "description": "Aplikasi Pengelolaan Kelas Kurikulum Merdeka & Google Form",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
