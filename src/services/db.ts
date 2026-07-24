@@ -60,21 +60,7 @@ const defaultNotifikasi: Notifikasi[] = [];
 
 // Database state initializer
 const initDatabase = () => {
-  // Purge old bulk sample data from localStorage if not already purged
-  if (localStorage.getItem('bulk_sample_data_purged_v2') !== 'true') {
-    localStorage.removeItem('guru');
-    localStorage.removeItem('siswa');
-    localStorage.removeItem('orang_tua');
-    localStorage.removeItem('mata_pelajaran');
-    localStorage.removeItem('jadwal_pelajaran');
-    localStorage.removeItem('absensi');
-    localStorage.removeItem('daftar_tugas');
-    localStorage.removeItem('tugas_siswa');
-    localStorage.removeItem('asesmen');
-    localStorage.removeItem('temuan_khusus');
-    localStorage.removeItem('notifikasi');
-    localStorage.setItem('bulk_sample_data_purged_v2', 'true');
-  }
+  localStorage.setItem('bulk_sample_data_purged_v2', 'true');
 
   const storedProfile = localStorage.getItem('profil_sekolah');
   if (!storedProfile || storedProfile === '{}' || JSON.parse(storedProfile).namaSekolah === undefined) {
