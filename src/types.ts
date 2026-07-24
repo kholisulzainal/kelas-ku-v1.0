@@ -44,7 +44,7 @@ export interface Guru {
   statusKepegawaian: string;
   password?: string;
   isWaliKelas?: boolean;
-  kelasWali?: string; // Spesifik kelas yang diwalikan (e.g. "Kelas I", "Kelas IV", etc)
+  kelasWali?: string; // Spesifik kelas yang diwalikan (e.g. "Kelas 1", "Kelas 4", etc)
   googleEmail?: string;
 }
 

@@ -117,9 +117,9 @@ export function NotificationCenter({ isOpen, onClose, currentRole, currentUserId
       const isWaliKelas = loggedInGuru?.isWaliKelas === true || loggedInGuru?.id === 'guru-1';
       
       if (isWaliKelas) {
-        const targetClass = loggedInGuru?.id === 'guru-1' ? 'Kelas IV' : 'Kelas Wali';
+        const targetClass = loggedInGuru?.id === 'guru-1' ? 'Kelas 4' : 'Kelas Wali';
         const todayStr = new Date().toISOString().split('T')[0];
-        const classStudents = siswas.filter(s => s.kelas === targetClass || targetClass === 'Kelas IV');
+        const classStudents = siswas.filter(s => s.kelas === targetClass || targetClass === 'Kelas 4');
         const studentIds = new Set(classStudents.map(s => s.id));
         const todayAbsen = db.absensi.getAll().filter(a => a.tanggal === todayStr && studentIds.has(a.siswaId));
         

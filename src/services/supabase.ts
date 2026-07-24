@@ -161,7 +161,7 @@ create table if not exists public.siswa (
   nis text,
   nama_siswa text not null,
   jenis_kelamin text,
-  kelas text not null default 'Kelas IV-A',
+  kelas text not null default 'Kelas 4-A',
   alamat text,
   foto_url text,
   nama_ayah text,
@@ -278,6 +278,62 @@ create table if not exists public.notifikasi (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- 13. Tabel News
+create table if not exists public.news (
+  id text primary key,
+  judul text not null,
+  konten text not null,
+  kategori text default 'Pengumuman',
+  penulis text default 'Admin',
+  tanggal text,
+  thumbnail_url text,
+  published boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 14. Tabel Gallery
+create table if not exists public.gallery (
+  id text primary key,
+  judul text not null,
+  deskripsi text,
+  image_url text not null,
+  kategori text default 'Kegiatan',
+  tanggal text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 15. Tabel Application Settings
+create table if not exists public.application_settings (
+  id text primary key,
+  theme text default 'light',
+  primary_color text,
+  secondary_color text,
+  website_title text,
+  footer_text text,
+  vision text,
+  mission text,
+  welcome_message text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 16. Tabel PPDB
+create table if not exists public.ppdb (
+  id text primary key,
+  nama_lengkap text not null,
+  nisn text,
+  jenis_kelamin text default 'L',
+  tempat_lahir text,
+  tanggal_lahir text,
+  nama_ayah text,
+  nama_ibu text,
+  no_telepon_ortu text,
+  alamat text,
+  status_pendaftaran text default 'Daftar',
+  dokumen_url text,
+  foto_url text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Izinkan akses publik (Row Level Security dinonaktifkan untuk mempermudah sinkronisasi awal)
 alter table public.profil_sekolah disable row level security;
 alter table public.guru disable row level security;
@@ -291,6 +347,10 @@ alter table public.tugas_siswa disable row level security;
 alter table public.asesmen disable row level security;
 alter table public.temuan_khusus disable row level security;
 alter table public.notifikasi disable row level security;
+alter table public.news disable row level security;
+alter table public.gallery disable row level security;
+alter table public.application_settings disable row level security;
+alter table public.ppdb disable row level security;
 
 -- JIKA TABEL SUDAH DIBUAT SEBELUMNYA DAN ANDA MENGALAMI ERROR:
 -- Jalankan perintah di bawah ini untuk menambahkan kolom yang kurang dan menonaktifkan Row Level Security secara paksa tanpa menghapus data yang ada!
@@ -331,13 +391,17 @@ alter table public.tugas_siswa disable row level security;
 alter table public.asesmen disable row level security;
 alter table public.temuan_khusus disable row level security;
 alter table public.notifikasi disable row level security;
+alter table public.news disable row level security;
+alter table public.gallery disable row level security;
+alter table public.application_settings disable row level security;
+alter table public.ppdb disable row level security;
 
 -- Buat Kebijakan Akses Publik (RLS Open Policy) sebagai jaminan jika RLS diaktifkan kembali
 do $$
 declare
   t text;
 begin
-  for t in select unnest(array['profil_sekolah','guru','siswa','orang_tua','mata_pelajaran','jadwal_pelajaran','absensi','daftar_tugas','tugas_siswa','asesmen','temuan_khusus','notifikasi'])
+  for t in select unnest(array['profil_sekolah','guru','siswa','orang_tua','mata_pelajaran','jadwal_pelajaran','absensi','daftar_tugas','tugas_siswa','asesmen','temuan_khusus','notifikasi','news','gallery','application_settings','ppdb'])
   loop
     execute format('drop policy if exists "Allow public access" on public.%I', t);
     execute format('create policy "Allow public access" on public.%I for all using (true) with check (true)', t);
@@ -363,7 +427,11 @@ const VALID_COLUMNS: { [key: string]: string[] } = {
   tugas_siswa: ['id', 'tugas_id', 'siswa_id', 'status_pengerjaan', 'tanggal_dikerjakan', 'nilai', 'umpan_balik'],
   asesmen: ['id', 'siswa_id', 'mapel_id', 'tipe', 'nama_penilaian', 'nilai', 'deskripsi_kompetensi', 'tanggal_penilaian', 'dinilai_oleh_id', 'kelas'],
   temuan_khusus: ['id', 'siswa_id', 'tanggal', 'kategori', 'deskripsi', 'tindakan_lanjut', 'dilaporkan_oleh_id', 'kelas'],
-  notifikasi: ['id', 'penerima_role', 'penerima_user_id', 'judul', 'pesan', 'tanggal', 'dibaca', 'tugas_id']
+  notifikasi: ['id', 'penerima_role', 'penerima_user_id', 'judul', 'pesan', 'tanggal', 'dibaca', 'tugas_id'],
+  news: ['id', 'judul', 'konten', 'kategori', 'penulis', 'tanggal', 'thumbnail_url', 'published'],
+  gallery: ['id', 'judul', 'deskripsi', 'image_url', 'kategori', 'tanggal'],
+  application_settings: ['id', 'theme', 'primary_color', 'secondary_color', 'website_title', 'footer_text', 'vision', 'mission', 'welcome_message'],
+  ppdb: ['id', 'nama_lengkap', 'nisn', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'nama_ayah', 'nama_ibu', 'no_telepon_ortu', 'alamat', 'status_pendaftaran', 'dokumen_url', 'foto_url']
 };
 
 const DEFAULT_SISWA_NISNS: { [id: string]: string } = {
@@ -612,7 +680,7 @@ async function ensureSiswaExists(siswaId: string, localSiswas: any[]): Promise<s
       id: siswaId,
       nisn: placeholderNisn,
       nama_siswa: placeholderName,
-      kelas: localSiswa?.kelas || 'Kelas IV-A',
+      kelas: localSiswa?.kelas || 'Kelas 4-A',
       jenis_kelamin: localSiswa?.jenisKelamin || 'L',
       alamat: localSiswa?.alamat || '',
       nama_ayah: localSiswa?.namaAyah || '',
@@ -978,7 +1046,11 @@ export async function syncAllToSupabase(): Promise<{ success: boolean; results?:
     { name: 'tugas_siswa', isArray: true },
     { name: 'asesmen', isArray: true },
     { name: 'temuan_khusus', isArray: true },
-    { name: 'notifikasi', isArray: true }
+    { name: 'notifikasi', isArray: true },
+    { name: 'news', isArray: true },
+    { name: 'gallery', isArray: true },
+    { name: 'application_settings', isArray: false },
+    { name: 'ppdb', isArray: true }
   ];
 
   const results: SyncResults = {};
@@ -1083,7 +1155,11 @@ export async function pullAllFromSupabase(): Promise<{ success: boolean; error?:
     { dbName: 'tugas_siswa', localName: 'tugas_siswa', isArray: true },
     { dbName: 'asesmen', localName: 'asesmen', isArray: true },
     { dbName: 'temuan_khusus', localName: 'temuan_khusus', isArray: true },
-    { dbName: 'notifikasi', localName: 'notifikasi', isArray: true }
+    { dbName: 'notifikasi', localName: 'notifikasi', isArray: true },
+    { dbName: 'news', localName: 'news_articles', isArray: true },
+    { dbName: 'gallery', localName: 'gallery_items', isArray: true },
+    { dbName: 'application_settings', localName: 'app_settings', isArray: false },
+    { dbName: 'ppdb', localName: 'ppdb_applicants', isArray: true }
   ];
 
   try {

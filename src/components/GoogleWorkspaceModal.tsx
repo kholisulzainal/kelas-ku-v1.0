@@ -527,7 +527,7 @@ REKAPITULASI NILAI ASESMEN & KOMPETENSI:
 
     try {
       // 1. Create spreadsheet
-      const spreadId = await createSpreadsheet(googleToken, `Data Siswa Kelas IV Kurikulum Merdeka`);
+      const spreadId = await createSpreadsheet(googleToken, `Data Siswa Kelas 4 Kurikulum Merdeka`);
 
       // 2. Prepare grid table values
       const headers = ['NO', 'NISN', 'NIS', 'NAMA SISWA', 'JENIS KELAMIN', 'KELAS', 'ALAMAT', 'NAMA AYAH', 'NAMA IBU', 'NO TELEPON'];
@@ -1134,7 +1134,7 @@ REKAPITULASI NILAI ASESMEN & KOMPETENSI:
                     onChange={(e) => setSelectedDocStudentId(e.target.value)}
                     className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none text-slate-800 dark:text-white"
                   >
-                    <option value="">-- Pilih Siswa Kelas IV-A --</option>
+                    <option value="">-- Pilih Siswa Kelas 4-A --</option>
                     {siswas.map(s => (
                       <option key={s.id} value={s.id}>{s.namaSiswa} ({s.nisn})</option>
                     ))}

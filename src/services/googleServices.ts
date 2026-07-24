@@ -559,7 +559,7 @@ export async function syncClassDataFromGoogleSheet(
         const finalJk: 'L' | 'P' = (rawJk.startsWith('P') || rawJk.startsWith('F') || rawJk === 'PEREMPUAN') ? 'P' : 'L';
 
         // Extract and construct attributes
-        const finalKelas = kelasIdx !== -1 ? row[kelasIdx]?.toString().trim() : 'Kelas IV';
+        const finalKelas = kelasIdx !== -1 ? row[kelasIdx]?.toString().trim() : 'Kelas 4';
         const finalAlamat = alamatIdx !== -1 ? row[alamatIdx]?.toString().trim() : '';
         const finalAyah = ayahIdx !== -1 ? row[ayahIdx]?.toString().trim() : '';
         const finalIbu = ibuIdx !== -1 ? row[ibuIdx]?.toString().trim() : '';

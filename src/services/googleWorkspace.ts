@@ -482,7 +482,7 @@ export async function sendNewAssignmentEmailAlerts(
     return { success: false, sentCount: 0, errors: ['Google Workspace tidak terhubung. Silakan login ke akun Google Anda di panel atas.'] };
   }
 
-  const targetClass = assignment.kelas || 'Kelas IV';
+  const targetClass = assignment.kelas || 'Kelas 4';
   const students = db.siswa.getAll().filter(s => s.kelas === targetClass);
 
   if (students.length === 0) {

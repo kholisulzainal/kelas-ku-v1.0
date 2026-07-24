@@ -439,7 +439,7 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
       const g = db.guru.getAll().find(gr => gr.id === currentUserId);
       if (g?.kelasWali) return g.kelasWali;
     }
-    return 'Kelas IV';
+    return 'Kelas 4';
   };
 
   const [calendarClassFilter, setCalendarClassFilter] = useState<string>(getInitialCalendarClass);
@@ -447,19 +447,23 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
 
   const normalizeClass = (cls?: string) => {
     if (!cls) return '';
-    return cls.toString().toUpperCase().replace(/KELAS\s*/i, '').trim();
+    let str = cls.toString().toUpperCase().replace(/KELAS\s*/i, '').replace(/KLS\s*/i, '').trim();
+    const mapRoman: Record<string, string> = { 'VIII': '8', 'VII': '7', 'VI': '6', 'IV': '4', 'V': '5', 'III': '3', 'II': '2', 'I': '1' };
+    for (const [rom, num] of Object.entries(mapRoman)) {
+      if (str === rom || str.startsWith(rom + '-') || str.startsWith(rom + ' ')) {
+        str = str.replace(rom, num);
+        break;
+      }
+    }
+    return str;
   };
 
   const matchesClass = (itemClass?: string, targetClass?: string) => {
     if (!targetClass || targetClass === 'Semua') return true;
-    if (!itemClass) return targetClass.includes('IV') || targetClass.includes('4');
+    if (!itemClass) return targetClass.includes('4');
     const normItem = normalizeClass(itemClass);
     const normTarget = normalizeClass(targetClass);
-    if (normItem === normTarget) return true;
-    const mapRoman: Record<string, string> = { 'IV': '4', 'V': '5', 'VI': '6', 'III': '3', 'II': '2', 'I': '1' };
-    const itemVal = mapRoman[normItem] || normItem;
-    const targetVal = mapRoman[normTarget] || normTarget;
-    return itemVal === targetVal;
+    return normItem === normTarget;
   };
 
   const getSchedulesForDayName = (dayName: string) => {
@@ -486,8 +490,7 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
       const taskDay = String(taskDate.getDate()).padStart(2, '0');
       const isSameDate = `${taskYear}-${taskMonth}-${taskDay}` === dateStr;
       if (!isSameDate) return false;
-      if (calendarClassFilter === 'Semua') return true;
-      return t.kelas === calendarClassFilter || (!t.kelas && calendarClassFilter === 'Kelas IV');
+      return matchesClass(t.kelas, calendarClassFilter);
     });
   };
 
@@ -564,12 +567,12 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
             {currentRole === 'operator' && (
               <option value="Semua">Semua Kelas</option>
             )}
-            <option value="Kelas I">Kelas I</option>
-            <option value="Kelas II">Kelas II</option>
-            <option value="Kelas III">Kelas III</option>
-            <option value="Kelas IV">Kelas IV</option>
-            <option value="Kelas V">Kelas V</option>
-            <option value="Kelas VI">Kelas VI</option>
+            <option value="Kelas 1">Kelas 1</option>
+            <option value="Kelas 2">Kelas 2</option>
+            <option value="Kelas 3">Kelas 3</option>
+            <option value="Kelas 4">Kelas 4</option>
+            <option value="Kelas 5">Kelas 5</option>
+            <option value="Kelas 6">Kelas 6</option>
           </select>
         </div>
       </div>
@@ -647,12 +650,12 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
                 {currentRole === 'operator' && (
                   <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Semua">Semua Kls (Operator)</option>
                 )}
-                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas I">Kls I</option>
-                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas II">Kls II</option>
-                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas III">Kls III</option>
-                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas IV">Kls IV</option>
-                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas V">Kls V</option>
-                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas VI">Kls VI</option>
+                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas 1">Kls 1</option>
+                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas 2">Kls 2</option>
+                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas 3">Kls 3</option>
+                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas 4">Kls 4</option>
+                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas 5">Kls 5</option>
+                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Kelas 6">Kls 6</option>
               </select>
             </div>
 

@@ -455,7 +455,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       }
     }
     const initialClasses = Array.from(new Set(db.siswa.getAll().map(s => s.kelas).filter(Boolean)));
-    const defaults = ['Kelas I', 'Kelas II', 'Kelas III', 'Kelas IV', 'Kelas V', 'Kelas VI'];
+    const defaults = ['Kelas 1', 'Kelas 2', 'Kelas 3', 'Kelas 4', 'Kelas 5', 'Kelas 6'];
     return sortClasses([...defaults, ...initialClasses]);
   });
 
@@ -1166,7 +1166,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
         nis: '',
         namaSiswa: '',
         jenisKelamin: 'L',
-        kelas: activeClassFilter !== 'Semua' ? activeClassFilter : (classList[0] || 'Kelas IV-A'),
+        kelas: activeClassFilter !== 'Semua' ? activeClassFilter : (classList[0] || 'Kelas 4-A'),
         alamat: '',
         namaAyah: '',
         namaIbu: '',
@@ -1219,11 +1219,11 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
     } else if (activeTab === 'jadwal_pelajaran') {
       reset({
         mapelId: mapels[0]?.id || '',
-        kelas: activeClassFilter !== 'Semua' ? activeClassFilter : (classList[0] || 'Kelas IV'),
+        kelas: activeClassFilter !== 'Semua' ? activeClassFilter : (classList[0] || 'Kelas 4'),
         hari: 'Senin',
         jamMulai: '07:30',
         jamSelesai: '09:00',
-        ruangan: 'Ruang Kelas IV-A'
+        ruangan: 'Ruang Kelas 4-A'
       });
     } else if (activeTab === 'temuan_khusus') {
       const filteredSiswa = siswas.filter(s => activeClassFilter === 'Semua' || s.kelas === activeClassFilter);
@@ -1389,7 +1389,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       nis: data.nis,
       namaSiswa: data.namaSiswa,
       jenisKelamin: data.jenisKelamin,
-      kelas: data.kelas || 'Kelas IV-A',
+      kelas: data.kelas || 'Kelas 4-A',
       alamat: data.alamat,
       namaAyah: data.namaAyah,
       namaIbu: data.namaIbu,
@@ -1426,7 +1426,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
 
   // C. MATA PELAJARAN CRUD
   const onSubmitMapel = (data: any) => {
-    const classToAssign = data.kelas || (activeClassFilter !== 'Semua' ? activeClassFilter : (loggedInGuru?.kelasWali || 'Kelas IV'));
+    const classToAssign = data.kelas || (activeClassFilter !== 'Semua' ? activeClassFilter : (loggedInGuru?.kelasWali || 'Kelas 4'));
     const item: MataPelajaran = {
       id: editingItem?.id || `mapel-${Date.now()}`,
       kodeMapel: data.kodeMapel,
@@ -1457,7 +1457,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       hari: data.hari,
       jamMulai: data.jamMulai,
       jamSelesai: data.jamSelesai,
-      ruangan: data.ruangan || 'Ruang Kelas IV-A'
+      ruangan: data.ruangan || 'Ruang Kelas 4-A'
     };
     db.jadwalPelajaran.upsert(item);
     setJadwals(db.jadwalPelajaran.getAll());
@@ -1512,7 +1512,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
 
   // F. TUGAS (GOOGLE FORM INTEGRATION) CRUD
   const onSubmitTugas = async (data: any) => {
-    const classToAssign = activeClassFilter !== 'Semua' ? activeClassFilter : (loggedInGuru?.kelasWali || 'Kelas IV');
+    const classToAssign = activeClassFilter !== 'Semua' ? activeClassFilter : (loggedInGuru?.kelasWali || 'Kelas 4');
     const item: DaftarTugas = {
       id: editingItem?.id || `tugas-${Date.now()}`,
       mapelId: data.mapelId,
@@ -1925,7 +1925,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
           'NISN': '0123456781',
           'NIS': '232404001',
           'Jenis Kelamin': 'L',
-          'Kelas': activeClassFilter !== 'Semua' ? activeClassFilter : 'Kelas IV',
+          'Kelas': activeClassFilter !== 'Semua' ? activeClassFilter : 'Kelas 4',
           'Alamat': 'Perum Geriya Indah Blok C3, Bandung',
           'Nama Ayah': 'Pak Joko Fauzi',
           'Nama Ibu': 'Ibu Ratna Fauzi',
@@ -1936,7 +1936,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
           'NISN': '0123456782',
           'NIS': '232404002',
           'Jenis Kelamin': 'P',
-          'Kelas': 'Kelas I',
+          'Kelas': 'Kelas 1',
           'Alamat': 'Jl. Merdeka No. 12, Bandung',
           'Nama Ayah': 'Pak Ahmad',
           'Nama Ibu': 'Ibu Aminah',
@@ -2083,16 +2083,16 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
           'Mata Pelajaran Utama': 'Tematik & Matematika',
           'Status Kepegawaian': 'PNS',
           'Is Wali Kelas': 'Ya',
-          'Kelas Wali': 'Kelas IV'
+          'Kelas Wali': 'Kelas 4'
         },
         {
           'NIP': '199001012015011001',
           'Nama Guru': 'Siti Aminah, S.Pd.',
           'Gelar': 'S.Pd. (Sarjana Pendidikan)',
-          'Mata Pelajaran Utama': 'Tematik Kelas I',
+          'Mata Pelajaran Utama': 'Tematik Kelas 1',
           'Status Kepegawaian': 'PNS',
           'Is Wali Kelas': 'Ya',
-          'Kelas Wali': 'Kelas I'
+          'Kelas Wali': 'Kelas 1'
         }
       );
     }
@@ -2285,7 +2285,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 field: 'Kelas Wali',
                 val: kelasWali || '(Kosong)',
                 issue: 'Ditandai sebagai Wali Kelas, tetapi Kelas Wali kosong atau "GURU MAPEL".',
-                fix: 'Silakan isi nama kelas wali yang valid (contoh: Kelas IV) sesuai dropdown kolom G.',
+                fix: 'Silakan isi nama kelas wali yang valid (contoh: Kelas 4) sesuai dropdown kolom G.',
                 severity: 'error'
               });
               details.push(`Baris ${rowNum}: Gagal - Kelas wali kosong untuk Wali Kelas.`);
@@ -3044,7 +3044,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
             return;
           }
 
-          const resolvedKelas = kelasRaw || (activeClassFilter !== 'Semua' ? activeClassFilter : 'Kelas I');
+          const resolvedKelas = kelasRaw || (activeClassFilter !== 'Semua' ? activeClassFilter : 'Kelas 1');
           const uniqSiswaKey = `${namaSiswa.toLowerCase()}_${resolvedKelas.toLowerCase()}`;
           if (seenSiswaKeys.has(uniqSiswaKey)) {
             skippedCount++;
@@ -4354,7 +4354,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
             {(() => {
               const filteredMapels = mapels.filter(m => {
                 if (activeClassFilter === 'Semua') return true;
-                return m.kelas === activeClassFilter || (!m.kelas && activeClassFilter === 'Kelas IV');
+                return m.kelas === activeClassFilter || (!m.kelas && activeClassFilter === 'Kelas 4');
               });
 
               if (filteredMapels.length === 0) {
@@ -4380,7 +4380,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                             {m.kodeMapel}
                           </span>
                           <span className="text-xs font-bold bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 px-2.5 py-1 rounded-xl border border-sky-200/50 dark:border-sky-800/30">
-                            {m.kelas || 'Kelas IV'}
+                            {m.kelas || 'Kelas 4'}
                           </span>
                         </div>
                         {(isCurrentGuruWaliKelas || m.guruPengampuId === loggedInUserId) && (
@@ -6394,7 +6394,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">Ruangan Kelas</label>
-                  <input type="text" placeholder="e.g. Ruang Kelas IV-A" {...register('ruangan')} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm" />
+                  <input type="text" placeholder="e.g. Ruang Kelas 4-A" {...register('ruangan')} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm" />
                 </div>
                 <div className="flex justify-end gap-3 pt-4">
                   <button type="button" onClick={() => setShowFormModal(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:underline">Batal</button>
@@ -7082,7 +7082,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
             <div>
               <input
                 type="text"
-                placeholder="Contoh: Kelas IV-B"
+                placeholder="Contoh: Kelas 4-B"
                 value={newClassNameInput}
                 onChange={(e) => setNewClassNameInput(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-m3-purple/20 outline-none text-slate-950 dark:text-white"

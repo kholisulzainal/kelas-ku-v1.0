@@ -31,7 +31,7 @@ export function OrangTuaDashboard({ activeTab, parentId }: OrangTuaDashboardProp
   const [childSubmissions, setChildSubmissions] = useState<TugasSiswa[]>(db.tugasSiswa.getAll().filter(ts => ts.siswaId === targetSiswaId));
   const [childGrades, setChildGrades] = useState<Asesmen[]>(db.asesmen.getAll().filter(a => a.siswaId === targetSiswaId));
   const [childAttendance, setChildAttendance] = useState<Absensi[]>(db.absensi.getAll().filter(a => a.siswaId === targetSiswaId));
-  const childKelas = currentSiswa?.kelas || 'Kelas IV';
+  const childKelas = currentSiswa?.kelas || 'Kelas 4';
   const subjects = db.mataPelajaran.getAll().filter(m => !m.kelas || m.kelas === childKelas);
 
   useEffect(() => {
@@ -152,7 +152,7 @@ export function OrangTuaDashboard({ activeTab, parentId }: OrangTuaDashboardProp
         
         <div className="bg-white/10 px-5 py-3 rounded-2xl text-xs backdrop-blur-sm border border-white/10 text-right min-w-[160px]">
           <div className="font-extrabold text-sm text-white leading-tight">{currentSiswa?.namaSiswa || 'Ahmad Fauzi'}</div>
-          <div className="text-m3-purple-light text-xs font-semibold mt-1">Kelas {currentSiswa?.kelas || 'Kelas IV-A'}</div>
+          <div className="text-m3-purple-light text-xs font-semibold mt-1">{currentSiswa?.kelas || 'Kelas 4-A'}</div>
           <div className="text-[10px] text-emerald-400 mt-1 font-bold">Wali dari {currentSiswa?.namaSiswa}</div>
         </div>
       </div>

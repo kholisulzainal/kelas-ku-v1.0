@@ -54,21 +54,21 @@ const defaultMataPelajaran: MataPelajaran[] = [
 ];
 
 const defaultJadwalPelajaran: JadwalPelajaran[] = [
-  { id: 'jadwal-1', mapelId: 'mapel-1', hari: 'Senin', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
-  { id: 'jadwal-2', mapelId: 'mapel-2', hari: 'Senin', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
-  { id: 'jadwal-3', mapelId: 'mapel-3', hari: 'Selasa', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
-  { id: 'jadwal-4', mapelId: 'mapel-4', hari: 'Selasa', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
-  { id: 'jadwal-5', mapelId: 'mapel-5', hari: 'Rabu', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Agama', kelas: 'Kelas IV' },
-  { id: 'jadwal-6', mapelId: 'mapel-6', hari: 'Rabu', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Seni', kelas: 'Kelas IV' },
-  { id: 'jadwal-7', mapelId: 'mapel-7', hari: 'Kamis', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Lapangan Olahraga', kelas: 'Kelas IV' },
-  { id: 'jadwal-8', mapelId: 'mapel-8', hari: 'Kamis', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Bahasa', kelas: 'Kelas IV' },
-  { id: 'jadwal-9', mapelId: 'mapel-2', hari: 'Jumat', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
-  { id: 'jadwal-10', mapelId: 'mapel-1', hari: 'Jumat', jamMulai: '09:15', jamSelesai: '10:30', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
-  // Default items for Kelas V
-  { id: 'jadwal-11', mapelId: 'mapel-3', hari: 'Senin', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas V' },
-  { id: 'jadwal-12', mapelId: 'mapel-4', hari: 'Senin', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas V' },
-  { id: 'jadwal-13', mapelId: 'mapel-1', hari: 'Selasa', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas V' },
-  { id: 'jadwal-14', mapelId: 'mapel-2', hari: 'Selasa', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas V' }
+  { id: 'jadwal-1', mapelId: 'mapel-1', hari: 'Senin', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
+  { id: 'jadwal-2', mapelId: 'mapel-2', hari: 'Senin', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
+  { id: 'jadwal-3', mapelId: 'mapel-3', hari: 'Selasa', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
+  { id: 'jadwal-4', mapelId: 'mapel-4', hari: 'Selasa', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
+  { id: 'jadwal-5', mapelId: 'mapel-5', hari: 'Rabu', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Agama', kelas: 'Kelas 4' },
+  { id: 'jadwal-6', mapelId: 'mapel-6', hari: 'Rabu', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Seni', kelas: 'Kelas 4' },
+  { id: 'jadwal-7', mapelId: 'mapel-7', hari: 'Kamis', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Lapangan Olahraga', kelas: 'Kelas 4' },
+  { id: 'jadwal-8', mapelId: 'mapel-8', hari: 'Kamis', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Bahasa', kelas: 'Kelas 4' },
+  { id: 'jadwal-9', mapelId: 'mapel-2', hari: 'Jumat', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
+  { id: 'jadwal-10', mapelId: 'mapel-1', hari: 'Jumat', jamMulai: '09:15', jamSelesai: '10:30', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
+  // Default items for Kelas 5
+  { id: 'jadwal-11', mapelId: 'mapel-3', hari: 'Senin', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas 5' },
+  { id: 'jadwal-12', mapelId: 'mapel-4', hari: 'Senin', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas 5' },
+  { id: 'jadwal-13', mapelId: 'mapel-1', hari: 'Selasa', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas 5' },
+  { id: 'jadwal-14', mapelId: 'mapel-2', hari: 'Selasa', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas 5' }
 ];
 
 const defaultAbsensi: Absensi[] = [];

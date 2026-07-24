@@ -35,7 +35,7 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [photoUrlInput, setPhotoUrlInput] = useState(currentSiswa?.fotoUrl || '');
   const [avatarTab, setAvatarTab] = useState<'boys' | 'girls'>('boys');
-  const siswaKelas = currentSiswa?.kelas || 'Kelas IV';
+  const siswaKelas = currentSiswa?.kelas || 'Kelas 4';
   const subjects = db.mataPelajaran.getAll().filter(m => !m.kelas || m.kelas === siswaKelas);
 
   const handleSavePhoto = () => {
