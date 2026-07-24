@@ -127,7 +127,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
         db.login('guru', found.id);
         onLoginSuccess('guru', found.id);
       } else {
-        setError('NIP atau Kata Sandi Guru salah. Anda dapat memilih akun guru langsung dari daftar di atas.');
+        setError('NIP atau Kata Sandi Guru salah.');
       }
     } else if (role === 'siswa') {
       const siswas = db.siswa.getAll();
@@ -282,39 +282,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
             {error && (
               <div className="bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-xs font-semibold p-3 rounded-[12px] border border-red-100 dark:border-red-900/50">
                 {error}
-              </div>
-            )}
-
-            {role === 'guru' && (
-              <div className="bg-blue-50/60 dark:bg-blue-950/30 p-3 rounded-[12px] border border-blue-100 dark:border-blue-900/40">
-                <label htmlFor="guru-select" className="block text-xs font-bold text-blue-900 dark:text-blue-300 mb-1.5 flex items-center justify-between">
-                  <span>Pilih Akun Guru / Wali Kelas:</span>
-                  <span className="text-[10px] font-normal text-blue-600 dark:text-blue-400">Klik untuk isi otomatis</span>
-                </label>
-                <select
-                  id="guru-select"
-                  onChange={(e) => {
-                    const selectedId = e.target.value;
-                    if (selectedId) {
-                      const g = db.guru.getAll().find(item => item.id === selectedId);
-                      if (g) {
-                        setUsername(g.nip || g.namaGuru);
-                        setPassword(g.password || 'guru123');
-                        setError('');
-                      }
-                    }
-                  }}
-                  className="w-full bg-white dark:bg-slate-800 border border-blue-200 dark:border-slate-700 rounded-[10px] px-3 py-2 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 cursor-pointer"
-                >
-                  <option value="">
-                    {db.guru.getAll().length > 0 ? '-- Pilih Akun Guru --' : '-- Belum Ada Data Guru (Masuk sebagai Operator) --'}
-                  </option>
-                  {db.guru.getAll().map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.namaGuru} {g.isWaliKelas && g.kelasWali ? `(${g.kelasWali})` : '(Guru Mapel)'}
-                    </option>
-                  ))}
-                </select>
               </div>
             )}
 

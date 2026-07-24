@@ -287,20 +287,6 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
     }
   };
 
-  // Operator flexible Tahun Pelajaran state & handler
-  const [tpInput, setTpInput] = useState(() => sekolah.tahunPelajaran || '2025/2026');
-  const [tpNotice, setTpNotice] = useState('');
-
-  const handleSaveTahunPelajaran = () => {
-    const cleanTp = tpInput.trim() || '2025/2026';
-    const updated = { ...sekolah, tahunPelajaran: cleanTp };
-    db.profilSekolah.update(updated);
-    setSekolah(updated);
-    window.dispatchEvent(new Event('school-profile-updated'));
-    setTpNotice('Tahun Pelajaran berhasil disimpan!');
-    setTimeout(() => setTpNotice(''), 3000);
-  };
-
   // Google Form Score Ingestion to Asesmen Harian states & handlers
   const [ingestTaskModal, setIngestTaskModal] = useState<DaftarTugas | null>(null);
   const [ingestScores, setIngestScores] = useState<{ [siswaId: string]: { nilai: string | number; deskripsi: string } }>({});
@@ -3585,56 +3571,6 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
 
   return (
     <div id="guru_dashboard_container" className="space-y-6">
-      {/* Operator Academic Year Banner (Flexible Input + Dedicated Save Button) */}
-      {isOperator && (
-        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-m3-lavender dark:bg-indigo-950/60 text-m3-purple dark:text-indigo-400 flex items-center justify-center shrink-0">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="text-sm sm:text-base font-bold text-slate-800 dark:text-white">Tahun Pelajaran Aktif:</h4>
-                <span className="px-3 py-0.5 bg-m3-lavender dark:bg-indigo-950/40 text-m3-purple dark:text-indigo-400 font-bold text-xs rounded-full">
-                  {sekolah.tahunPelajaran || '2025/2026'}
-                </span>
-                {tpNotice && (
-                  <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs rounded-full">
-                    {tpNotice}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Tahun pelajaran disinkronkan secara otomatis pada seluruh laporan rekapitulasi, cetak dokumen, dan ekspor PDF.
-              </p>
-            </div>
-          </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSaveTahunPelajaran();
-            }}
-            className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 px-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 ml-auto flex-wrap sm:flex-nowrap"
-          >
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Tahun Pelajaran:</span>
-            <input
-              type="text"
-              value={tpInput}
-              onChange={(e) => setTpInput(e.target.value)}
-              placeholder="Contoh: 2025/2026"
-              className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-m3-purple/20 min-w-[150px]"
-            />
-            <button
-              type="submit"
-              className="bg-m3-purple hover:bg-m3-purple-dark text-white font-bold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer shadow-sm transition-colors whitespace-nowrap"
-            >
-              Simpan
-            </button>
-          </form>
-        </div>
-      )}
-
       {/* 1. PROFIL SEKOLAH */}
       {activeTab === 'profil_sekolah' && (
         <div id="school_profile_view" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3805,6 +3741,18 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                     <option value="B">Baik (B)</option>
                     <option value="C">Cukup (C)</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Tahun Pelajaran Aktif</label>
+                  <input
+                    type="text"
+                    disabled={!isCurrentGuruWaliKelas}
+                    defaultValue={sekolah.tahunPelajaran || '2025/2026'}
+                    placeholder="Contoh: 2025/2026"
+                    {...register('tahunPelajaran')}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold text-m3-purple dark:text-indigo-400 disabled:opacity-75 disabled:cursor-not-allowed"
+                  />
                 </div>
 
 
