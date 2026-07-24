@@ -42,9 +42,34 @@ const defaultSiswa: Siswa[] = [];
 
 const defaultOrangTua: OrangTua[] = [];
 
-const defaultMataPelajaran: MataPelajaran[] = [];
+const defaultMataPelajaran: MataPelajaran[] = [
+  { id: 'mapel-1', kodeMapel: 'PPKN', namaMapel: 'Pendidikan Pancasila', kkm: 75 },
+  { id: 'mapel-2', kodeMapel: 'BINDO', namaMapel: 'Bahasa Indonesia', kkm: 75 },
+  { id: 'mapel-3', kodeMapel: 'MTK', namaMapel: 'Matematika', kkm: 70 },
+  { id: 'mapel-4', kodeMapel: 'IPAS', namaMapel: 'IPAS (IPA & IPS)', kkm: 72 },
+  { id: 'mapel-5', kodeMapel: 'PAIBP', namaMapel: 'Pendidikan Agama & Budi Pekerti', kkm: 75 },
+  { id: 'mapel-6', kodeMapel: 'SBDP', namaMapel: 'Seni Budaya & Prakarya', kkm: 75 },
+  { id: 'mapel-7', kodeMapel: 'PJOK', namaMapel: 'PJOK', kkm: 75 },
+  { id: 'mapel-8', kodeMapel: 'BING', namaMapel: 'Bahasa Inggris', kkm: 70 }
+];
 
-const defaultJadwalPelajaran: JadwalPelajaran[] = [];
+const defaultJadwalPelajaran: JadwalPelajaran[] = [
+  { id: 'jadwal-1', mapelId: 'mapel-1', hari: 'Senin', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
+  { id: 'jadwal-2', mapelId: 'mapel-2', hari: 'Senin', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
+  { id: 'jadwal-3', mapelId: 'mapel-3', hari: 'Selasa', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
+  { id: 'jadwal-4', mapelId: 'mapel-4', hari: 'Selasa', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
+  { id: 'jadwal-5', mapelId: 'mapel-5', hari: 'Rabu', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Agama', kelas: 'Kelas IV' },
+  { id: 'jadwal-6', mapelId: 'mapel-6', hari: 'Rabu', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Seni', kelas: 'Kelas IV' },
+  { id: 'jadwal-7', mapelId: 'mapel-7', hari: 'Kamis', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Lapangan Olahraga', kelas: 'Kelas IV' },
+  { id: 'jadwal-8', mapelId: 'mapel-8', hari: 'Kamis', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Bahasa', kelas: 'Kelas IV' },
+  { id: 'jadwal-9', mapelId: 'mapel-2', hari: 'Jumat', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
+  { id: 'jadwal-10', mapelId: 'mapel-1', hari: 'Jumat', jamMulai: '09:15', jamSelesai: '10:30', ruangan: 'Ruang Kelas', kelas: 'Kelas IV' },
+  // Default items for Kelas V
+  { id: 'jadwal-11', mapelId: 'mapel-3', hari: 'Senin', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas V' },
+  { id: 'jadwal-12', mapelId: 'mapel-4', hari: 'Senin', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas V' },
+  { id: 'jadwal-13', mapelId: 'mapel-1', hari: 'Selasa', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas V' },
+  { id: 'jadwal-14', mapelId: 'mapel-2', hari: 'Selasa', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas V' }
+];
 
 const defaultAbsensi: Absensi[] = [];
 
@@ -368,6 +393,7 @@ export const db = {
     getAll: (): MataPelajaran[] => {
       const data = localStorage.getItem('mata_pelajaran');
       const list: MataPelajaran[] = data ? JSON.parse(data) : [];
+      if (list.length === 0) return defaultMataPelajaran;
       return list.sort((a, b) => a.namaMapel.localeCompare(b.namaMapel));
     },
     save: (items: MataPelajaran[]) => {
@@ -400,7 +426,9 @@ export const db = {
   jadwalPelajaran: {
     getAll: (): JadwalPelajaran[] => {
       const data = localStorage.getItem('jadwal_pelajaran');
-      return data ? JSON.parse(data) : [];
+      const list: JadwalPelajaran[] = data ? JSON.parse(data) : [];
+      if (list.length === 0) return defaultJadwalPelajaran;
+      return list;
     },
     save: (items: JadwalPelajaran[]) => {
       localStorage.setItem('jadwal_pelajaran', JSON.stringify(items));

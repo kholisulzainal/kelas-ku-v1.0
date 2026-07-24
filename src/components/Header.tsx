@@ -4,7 +4,6 @@ import { useTheme } from './ThemeContext';
 import { db } from '../services/db';
 import { Notifikasi, UserRole } from '../types';
 import { SupabaseSyncModal } from './SupabaseSyncModal';
-import { GoogleWorkspaceModal } from './GoogleWorkspaceModal';
 
 interface HeaderProps {
   currentRole: UserRole;
@@ -190,17 +189,6 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
             </div>
           )}
 
-          {/* Google Workspace Integration */}
-          <button
-            id="google_workspace_modal_btn"
-            onClick={() => setIsGoogleModalOpen(true)}
-            title="Integrasi Google Workspace"
-            className="h-[40px] px-3 sm:px-3.5 rounded-[12px] bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-semibold border border-blue-100 dark:border-blue-900/30 cursor-pointer flex items-center justify-center gap-1.5 text-xs shrink-0 transition-colors"
-          >
-            <Chrome className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span className="hidden md:inline font-bold">Google Workspace</span>
-          </button>
-
           {/* Supabase Sync Toggle */}
           <button
             id="supabase_sync_modal_btn"
@@ -352,9 +340,6 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
       
       {/* Supabase Sync Panel Modal */}
       <SupabaseSyncModal isOpen={isSupabaseModalOpen} onClose={() => setIsSupabaseModalOpen(false)} />
-
-      {/* Google Workspace Integrations Modal */}
-      <GoogleWorkspaceModal isOpen={isGoogleModalOpen} onClose={() => setIsGoogleModalOpen(false)} />
 
       {/* CUSTOM DATABASE RESET CONFIRMATION MODAL */}
       {showResetConfirm && (

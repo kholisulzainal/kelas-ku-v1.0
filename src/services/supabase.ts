@@ -4,9 +4,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const URL_KEY = 'supabase_project_url';
 const ANON_KEY = 'supabase_anon_key';
 
-// Default Supabase credentials fallback for production deployment (Vercel / GitHub)
-export const DEFAULT_SUPABASE_URL = 'https://bznfilozrqhmnjvptqic.supabase.co';
-export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6bmZpbG96cnFobW5qdnB0cWljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMDc4ODAsImV4cCI6MjA5OTg4Mzg4MH0.utqOLbyIp4UJN2zUKwJpoPEw7EJglUxz-iUTD-Cghds';
+// Default Supabase credentials fallback (Empty by default unless user configures custom credentials)
+export const DEFAULT_SUPABASE_URL = '';
+export const DEFAULT_SUPABASE_ANON_KEY = '';
 
 export interface SupabaseConfig {
   url: string;
@@ -17,18 +17,13 @@ export function getSupabaseConfig(): SupabaseConfig {
   let url = localStorage.getItem(URL_KEY) || '';
   let anonKey = localStorage.getItem(ANON_KEY) || '';
 
-  // Fallback to environment variables or standard project default if localStorage is empty
+  // Fallback ONLY to real environment variables if localStorage is empty
   if (!url) {
     const envUrl = ((import.meta as any).env?.VITE_SUPABASE_URL as string) || 
                    ((import.meta as any).env?.NEXT_PUBLIC_SUPABASE_URL as string) || 
                    (typeof process !== 'undefined' && (process.env?.VITE_SUPABASE_URL || process.env?.NEXT_PUBLIC_SUPABASE_URL)) || '';
-    const envAppUrl = ((import.meta as any).env?.APP_URL as string) || (typeof process !== 'undefined' && process.env?.APP_URL) || '';
     if (envUrl) {
       url = envUrl;
-    } else if (envAppUrl && envAppUrl.includes('supabase.co')) {
-      url = envAppUrl;
-    } else {
-      url = DEFAULT_SUPABASE_URL;
     }
   }
 
@@ -44,13 +39,8 @@ export function getSupabaseConfig(): SupabaseConfig {
                    ((import.meta as any).env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY as string) || 
                    ((import.meta as any).env?.NEXT_PUBLIC_SUPABASE_ANON_KEY as string) || 
                    (typeof process !== 'undefined' && (process.env?.VITE_SUPABASE_ANON_KEY || process.env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY)) || '';
-    const envGeminiKey = ((import.meta as any).env?.GEMINI_API_KEY as string) || (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || '';
     if (envKey) {
       anonKey = envKey;
-    } else if (envGeminiKey && envGeminiKey.startsWith('eyJ')) {
-      anonKey = envGeminiKey;
-    } else {
-      anonKey = DEFAULT_SUPABASE_ANON_KEY;
     }
   }
 

@@ -13,7 +13,7 @@ import { AutoLogoutManager } from './components/AutoLogoutManager';
 import { db } from './services/db';
 import { UserRole } from './types';
 import { X } from 'lucide-react';
-import { pullAllFromSupabase } from './services/supabase';
+import { pullAllFromSupabase, getSupabaseConfig } from './services/supabase';
 import { startRealtimeSync } from './services/realtimeSync';
 
 function MainApp() {
@@ -28,26 +28,26 @@ function MainApp() {
 
   // Auto sync and Realtime listener on mount
   useEffect(() => {
-    // 1. Trigger initial pull automatically so user has latest data without clicking manual button
-    pullAllFromSupabase()
-      .then((res) => {
-        if (res.success) {
-          console.log('[Auto Sync] Pulled all tables from Supabase successfully on load.');
-          // Fire global event to refresh all dashboards
-          window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: '' } }));
-        } else {
-          console.warn('[Auto Sync] Could not auto-pull on load:', res.error);
-        }
-      })
-      .catch((err) => {
-        console.error('[Auto Sync] Error during auto-pull on load:', err);
-      });
+    // 1. Trigger pull ONLY if Supabase is explicitly configured
+    const { url, anonKey } = getSupabaseConfig();
+    if (url && anonKey) {
+      pullAllFromSupabase()
+        .then((res) => {
+          if (res.success) {
+            console.log('[Auto Sync] Pulled all tables from Supabase successfully on load.');
+            window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: '' } }));
+          }
+        })
+        .catch((err) => {
+          console.error('[Auto Sync] Error during auto-pull on load:', err);
+        });
 
-    // 2. Start real-time Postgres subscription channel
-    const unsubscribe = startRealtimeSync();
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+      // 2. Start real-time Postgres subscription channel
+      const unsubscribe = startRealtimeSync();
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
+    }
   }, []);
   
   // Navigation states

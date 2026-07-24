@@ -436,19 +436,36 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
   };
 
   const [calendarClassFilter, setCalendarClassFilter] = useState<string>(getInitialCalendarClass);
+  const [calendarViewMode, setCalendarViewMode] = useState<'calendar' | 'weekly_schedule'>('calendar');
+
+  const normalizeClass = (cls?: string) => {
+    if (!cls) return '';
+    return cls.toString().toUpperCase().replace(/KELAS\s*/i, '').trim();
+  };
+
+  const matchesClass = (itemClass?: string, targetClass?: string) => {
+    if (!targetClass || targetClass === 'Semua') return true;
+    if (!itemClass) return targetClass.includes('IV') || targetClass.includes('4');
+    const normItem = normalizeClass(itemClass);
+    const normTarget = normalizeClass(targetClass);
+    if (normItem === normTarget) return true;
+    const mapRoman: Record<string, string> = { 'IV': '4', 'V': '5', 'VI': '6', 'III': '3', 'II': '2', 'I': '1' };
+    const itemVal = mapRoman[normItem] || normItem;
+    const targetVal = mapRoman[normTarget] || normTarget;
+    return itemVal === targetVal;
+  };
 
   const getSchedulesForDayName = (dayName: string) => {
     return schedules
       .filter(s => {
         if (s.hari !== dayName) return false;
-        if (calendarClassFilter === 'Semua') return true;
-        return s.kelas === calendarClassFilter || (!s.kelas && calendarClassFilter === 'Kelas IV');
+        return matchesClass(s.kelas, calendarClassFilter);
       })
       .map(s => {
         const mapel = subjects.find(m => m.id === s.mapelId);
         return {
           ...s,
-          mapelNama: mapel ? mapel.namaMapel : 'Mapel Lain'
+          mapelNama: mapel ? mapel.namaMapel : 'Mata Pelajaran'
         };
       });
   };
@@ -504,20 +521,114 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
   const selectedHoliday = syncedHolidays.find(h => h.date === selectedDateStr);
 
   return (
-    <div id="calendar_root" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Calendar Grid */}
-      <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-md">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div>
-            <h3 className="text-lg sm:text-xl font-bold text-m3-text dark:text-white flex items-center gap-2 leading-tight">
-              <CalendarIcon className="w-5 h-5 text-m3-purple shrink-0" />
-              <span>Kalender Akademik Indonesia</span>
-            </h3>
-            <p className="text-[11px] sm:text-xs text-m3-sec-text dark:text-slate-400 mt-0.5">
-              Tahun Ajaran 2026/2027 (Dilengkapi Libur Nasional & Cuti Bersama)
-            </p>
+    <div id="calendar_root" className="space-y-6">
+      {/* View Mode & Filter Header */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+          <button
+            onClick={() => setCalendarViewMode('calendar')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              calendarViewMode === 'calendar'
+                ? 'bg-m3-purple text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+            }`}
+          >
+            📅 Kalender Akademik
+          </button>
+          <button
+            onClick={() => setCalendarViewMode('weekly_schedule')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              calendarViewMode === 'weekly_schedule'
+                ? 'bg-m3-purple text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+            }`}
+          >
+            📖 Jadwal Pelajaran Kelas ({calendarClassFilter})
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500">Kelas:</span>
+          <select
+            value={calendarClassFilter}
+            onChange={(e) => setCalendarClassFilter(e.target.value)}
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+          >
+            {currentRole === 'operator' && (
+              <option value="Semua">Semua Kelas</option>
+            )}
+            <option value="Kelas I">Kelas I</option>
+            <option value="Kelas II">Kelas II</option>
+            <option value="Kelas III">Kelas III</option>
+            <option value="Kelas IV">Kelas IV</option>
+            <option value="Kelas V">Kelas V</option>
+            <option value="Kelas VI">Kelas VI</option>
+          </select>
+        </div>
+      </div>
+
+      {calendarViewMode === 'weekly_schedule' ? (
+        /* WEEKLY CLASS SCHEDULE MATRIX */
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-md space-y-6">
+          <div className="flex justify-between items-center border-b border-m3-border dark:border-slate-800 pb-4">
+            <div>
+              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5 text-m3-purple" />
+                Jadwal Pelajaran Mingguan - {calendarClassFilter}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">Daftar jam pelajaran dan mata pelajaran aktif per hari</p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5">
+
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'].map((hariName) => {
+              const daySchs = getSchedulesForDayName(hariName);
+              return (
+                <div key={hariName} className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
+                  <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2">
+                    <span className="font-extrabold text-sm text-m3-purple dark:text-indigo-400">{hariName}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-m3-purple/10 text-m3-purple rounded-full">
+                      {daySchs.length} Mapel
+                    </span>
+                  </div>
+
+                  {daySchs.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {daySchs.map((s) => (
+                        <div key={s.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-2xs space-y-1">
+                          <div className="flex justify-between items-start">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white leading-snug">{s.mapelNama}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-[10px] text-slate-500 font-semibold pt-1 border-t border-slate-100 dark:border-slate-800">
+                            <span>⏱️ {s.jamMulai} - {s.jamSelesai}</span>
+                            <span>📍 {s.ruangan}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic py-4 text-center">Tidak ada jadwal</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        /* STANDARD CALENDAR GRID */
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-md">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-m3-text dark:text-white flex items-center gap-2 leading-tight">
+                  <CalendarIcon className="w-5 h-5 text-m3-purple shrink-0" />
+                  <span>Kalender Akademik Indonesia</span>
+                </h3>
+                <p className="text-[11px] sm:text-xs text-m3-sec-text dark:text-slate-400 mt-0.5">
+                  Tahun Ajaran 2026/2027 (Dilengkapi Libur Nasional & Cuti Bersama)
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5">
             {/* Filter Kelas Select for Android & Browser */}
             <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
               <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">Filter Kls:</span>
@@ -542,7 +653,7 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-full text-[10px] sm:text-xs font-bold text-emerald-700 dark:text-emerald-400 shadow-sm">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>{googleUser.email}</span>
+                  <span className="truncate max-w-[140px] sm:max-w-[200px]" title={googleUser.email}>{googleUser.email}</span>
                 </div>
                 <button
                   onClick={() => loadGoogleEvents(googleToken!)}
@@ -560,6 +671,13 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
                   title="Ekspor seluruh tugas dan agenda sekolah ke Google Kalender Anda"
                 >
                   <span>Ekspor Tugas</span>
+                </button>
+                <button
+                  onClick={handleLogoutGoogle}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 dark:bg-slate-800 dark:hover:bg-red-950/30 dark:text-slate-300 dark:hover:text-red-400 rounded-full text-[10px] font-bold transition-all cursor-pointer"
+                  title="Putuskan akun Google saat ini"
+                >
+                  <span>Putuskan</span>
                 </button>
               </div>
             ) : (
@@ -891,6 +1009,8 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
           💡 Gunakan panel ini untuk melihat rincian jadwal harian kelas. Libur nasional dan cuti bersama resmi otomatis terintegrasi.
         </div>
       </div>
+    </div>
+  )}
 
       {/* CUSTOM CALENDAR ALERT DIALOG */}
       {calendarAlert && (

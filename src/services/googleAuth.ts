@@ -1,3 +1,4 @@
+import { db } from './db';
 import { 
   getStoredGoogleToken, 
   saveGoogleToken, 
@@ -33,22 +34,41 @@ export const initAuth = (
   return () => {};
 };
 
-// Sign in with Google (Standalone OAuth & Workspace session)
-export const googleSignIn = async (): Promise<{ user: any; accessToken: string; isDemoFallback?: boolean } | null> => {
+// Sign in with Google (Standalone OAuth & Workspace session for any user role)
+export const googleSignIn = async (customEmail?: string, customName?: string): Promise<{ user: any; accessToken: string; isDemoFallback?: boolean } | null> => {
   try {
-    const defaultUser: any = {
-      uid: 'guru-belajar-id-demo',
-      displayName: 'Kholisul Zainal Asfan Sholikh, S.Pd.',
-      email: 'kholisul411@guru.sd.belajar.id',
-      photoURL: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+    const currentUser = db.getCurrentUser();
+    let userEmail = customEmail?.trim();
+    let displayName = customName?.trim() || currentUser?.name || 'Warga Sekolah';
+
+    if (!userEmail) {
+      const input = window.prompt(`Masukkan alamat email Google / Gmail pribadi Anda (${displayName}):`, currentUser?.role === 'siswa' ? 'siswa@gmail.com' : currentUser?.role === 'orang_tua' ? 'ortu@gmail.com' : 'user@gmail.com');
+      if (!input) return null;
+      userEmail = input.trim();
+    }
+
+    if (!userEmail || !userEmail.includes('@')) {
+      alert('Format email Google tidak valid.');
+      return null;
+    }
+
+    const userObj: any = {
+      uid: `google-${currentUser?.role || 'user'}-${currentUser?.id || Date.now()}`,
+      displayName: displayName,
+      email: userEmail,
+      photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=4f46e5&color=fff`
     };
-    const activeToken = getStoredGoogleToken() || 'demo-google-access-token';
+
+    const activeToken = `token-google-${currentUser?.role || 'user'}-${Date.now()}`;
     cachedAccessToken = activeToken;
     saveGoogleToken(activeToken);
-    saveStoredGoogleUser(defaultUser);
-    linkGoogleEmailToActiveGuru(defaultUser.email);
+    saveStoredGoogleUser(userObj);
 
-    return { user: defaultUser, accessToken: activeToken, isDemoFallback: true };
+    if (currentUser?.role === 'guru') {
+      linkGoogleEmailToActiveGuru(userEmail);
+    }
+
+    return { user: userObj, accessToken: activeToken, isDemoFallback: true };
   } catch (error: any) {
     console.warn('Google Sign In Notice:', error);
     throw error;

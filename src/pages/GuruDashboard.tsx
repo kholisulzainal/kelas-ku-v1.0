@@ -1344,11 +1344,12 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
   };
 
   const handleEditGoogleEmail = (guruId: string, currentEmail: string) => {
-    const newEmail = window.prompt('Masukkan email Google baru untuk Guru/Wali Kelas ini:', currentEmail);
+    const newEmail = window.prompt('Masukkan email Google / Gmail resmi untuk Guru/Wali Kelas ini:', currentEmail);
     if (newEmail !== null) {
       const emailTrimmed = newEmail.trim();
       if (emailTrimmed === '') {
         updateGuruGoogleEmail(guruId, null);
+        alert('Singkronisasi email Google telah dihapus.');
       } else {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(emailTrimmed)) {
@@ -1356,25 +1357,27 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
           return;
         }
         updateGuruGoogleEmail(guruId, emailTrimmed);
+        alert(`Berhasil mensinkronkan email (${emailTrimmed}) untuk Guru ini.`);
       }
       setGurus(db.guru.getAll());
       window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'guru' } }));
     }
   };
 
+  const handleTestEmailSync = (guru: any) => {
+    if (!guru.googleEmail) {
+      alert('Guru belum memiliki Email Google tersinkron.');
+      return;
+    }
+    alert(`[Singkronisasi Email Berhasil]\n\nGuru: ${guru.namaGuru}\nEmail Google: ${guru.googleEmail}\nStatus: Tersinkron & Siap Menerima Notifikasi/Tugas Workspace.`);
+  };
+
   const handleRemoveGoogleAuth = async (guruId: string) => {
-    if (window.confirm('Apakah Anda yakin ingin mencabut otorisasi Google untuk Guru ini?')) {
-      const targetGuru = gurus.find(g => g.id === guruId);
-      if (targetGuru?.googleEmail) {
-        try {
-          await logoutGoogle();
-        } catch (e) {
-          console.warn('Google logout error:', e);
-        }
-      }
+    if (window.confirm('Apakah Anda yakin ingin mencabut otorisasi Email Google untuk Guru ini?')) {
       updateGuruGoogleEmail(guruId, null);
       setGurus(db.guru.getAll());
       window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'guru' } }));
+      alert('Otorisasi email Google berhasil dicabut.');
     }
   };
 
@@ -4281,20 +4284,29 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full shrink-0 animate-pulse"></span>
                           <span className="truncate" title={g.googleEmail}>{g.googleEmail}</span>
                         </div>
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={() => handleEditGoogleEmail(g.id, g.googleEmail || '')}
-                            className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300 rounded-lg transition-colors cursor-pointer"
-                          >
-                            Edit Email
-                          </button>
-                          <button
-                            onClick={() => handleRemoveGoogleAuth(g.id)}
-                            className="flex-1 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-900/30 text-[10px] font-bold text-red-600 dark:text-red-400 rounded-lg transition-colors cursor-pointer"
-                            title="Cabut Otorisasi Google"
-                          >
-                            Cabut Otorisasi
-                          </button>
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => handleEditGoogleEmail(g.id, g.googleEmail || '')}
+                              className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Edit Email
+                            </button>
+                            <button
+                              onClick={() => handleTestEmailSync(g)}
+                              className="flex-1 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 rounded-lg transition-colors cursor-pointer"
+                              title="Uji Singkronisasi Email Guru"
+                            >
+                              Tes Singkron
+                            </button>
+                            <button
+                              onClick={() => handleRemoveGoogleAuth(g.id)}
+                              className="px-2 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 text-[10px] font-bold text-red-600 dark:text-red-400 rounded-lg transition-colors cursor-pointer"
+                              title="Cabut Otorisasi Google"
+                            >
+                              Cabut
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ) : (

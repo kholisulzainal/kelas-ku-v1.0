@@ -23,29 +23,28 @@ export interface GoogleUserProfile {
 
 export function saveStoredGoogleUser(userProfile: GoogleUserProfile): void {
   const currentUser = db.getCurrentUser();
+  const userKey = currentUser ? `${USER_PROFILE_STORAGE_KEY}_${currentUser.role}_${currentUser.id}` : USER_PROFILE_STORAGE_KEY;
+  localStorage.setItem(userKey, JSON.stringify(userProfile));
   localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(userProfile));
-  if (currentUser && currentUser.role === 'guru') {
-    localStorage.setItem(`${USER_PROFILE_STORAGE_KEY}_${currentUser.id}`, JSON.stringify(userProfile));
-  }
   localStorage.setItem(CONSENT_STORAGE_KEY, 'true');
-  linkGoogleEmailToActiveGuru(userProfile.email);
+  if (currentUser && currentUser.role === 'guru') {
+    linkGoogleEmailToActiveGuru(userProfile.email);
+  }
 }
 
 export function getStoredGoogleUser(): GoogleUserProfile | null {
   const currentUser = db.getCurrentUser();
-  
-  if (currentUser && currentUser.role === 'guru') {
-    // 1. Check teacher-specific profile key
-    const teacherProfileStr = localStorage.getItem(`${USER_PROFILE_STORAGE_KEY}_${currentUser.id}`);
-    if (teacherProfileStr) {
+  if (currentUser) {
+    const userKey = `${USER_PROFILE_STORAGE_KEY}_${currentUser.role}_${currentUser.id}`;
+    const userProfileStr = localStorage.getItem(userKey);
+    if (userProfileStr) {
       try {
-        return JSON.parse(teacherProfileStr);
-      } catch (e) {
-        // ignore error
-      }
+        return JSON.parse(userProfileStr);
+      } catch (e) {}
     }
+  }
 
-    // 2. Check active Guru record in DB
+  if (currentUser && currentUser.role === 'guru') {
     const guru = db.guru.getAll().find(g => g.id === currentUser.id);
     if (guru && guru.googleEmail) {
       return {
@@ -54,19 +53,13 @@ export function getStoredGoogleUser(): GoogleUserProfile | null {
         photoURL: guru.fotoUrl
       };
     }
-
-    // Active guru has no connected email
-    return null;
   }
 
-  // 3. Check global profile key (Admin / Operator or default)
   const profileStr = localStorage.getItem(USER_PROFILE_STORAGE_KEY);
   if (profileStr) {
     try {
       return JSON.parse(profileStr);
-    } catch (e) {
-      // ignore JSON parse error
-    }
+    } catch (e) {}
   }
 
   return null;
@@ -74,34 +67,42 @@ export function getStoredGoogleUser(): GoogleUserProfile | null {
 
 export function clearStoredGoogleUser(): void {
   const currentUser = db.getCurrentUser();
+  if (currentUser) {
+    localStorage.removeItem(`${USER_PROFILE_STORAGE_KEY}_${currentUser.role}_${currentUser.id}`);
+  }
   localStorage.removeItem(USER_PROFILE_STORAGE_KEY);
   localStorage.removeItem(CONSENT_STORAGE_KEY);
-  if (currentUser && currentUser.role === 'guru') {
-    localStorage.removeItem(`${USER_PROFILE_STORAGE_KEY}_${currentUser.id}`);
-  }
 }
 
 /**
- * Persist the Google OAuth Access Token and its expiry duration locally.
- * This ensures the user does not need to re-authenticate on every page refresh.
+ * Persist the Google OAuth Access Token and its expiry duration locally per user session.
  */
 export function saveGoogleToken(accessToken: string, expiresInSeconds: number = 3600): void {
+  const currentUser = db.getCurrentUser();
   const expiryTimestamp = Date.now() + expiresInSeconds * 1000;
+  
+  const tokenKey = currentUser ? `${TOKEN_STORAGE_KEY}_${currentUser.role}_${currentUser.id}` : TOKEN_STORAGE_KEY;
+  const expiryKey = currentUser ? `${EXPIRY_STORAGE_KEY}_${currentUser.role}_${currentUser.id}` : EXPIRY_STORAGE_KEY;
+
+  localStorage.setItem(tokenKey, accessToken);
+  localStorage.setItem(expiryKey, expiryTimestamp.toString());
   localStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
   localStorage.setItem(EXPIRY_STORAGE_KEY, expiryTimestamp.toString());
   localStorage.setItem(CONSENT_STORAGE_KEY, 'true');
   
-  // Also dispatch an event to notify the application that token has been refreshed/saved
   window.dispatchEvent(new CustomEvent('google-token-updated', { detail: { accessToken } }));
 }
 
 /**
- * Retrieve the active cached access token.
- * Validates against expiry with a 5-minute safety buffer.
+ * Retrieve the active cached access token for the current logged-in user.
  */
 export function getStoredGoogleToken(): string | null {
-  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-  const expiryStr = localStorage.getItem(EXPIRY_STORAGE_KEY);
+  const currentUser = db.getCurrentUser();
+  const tokenKey = currentUser ? `${TOKEN_STORAGE_KEY}_${currentUser.role}_${currentUser.id}` : TOKEN_STORAGE_KEY;
+  const expiryKey = currentUser ? `${EXPIRY_STORAGE_KEY}_${currentUser.role}_${currentUser.id}` : EXPIRY_STORAGE_KEY;
+
+  let token = localStorage.getItem(tokenKey) || localStorage.getItem(TOKEN_STORAGE_KEY);
+  let expiryStr = localStorage.getItem(expiryKey) || localStorage.getItem(EXPIRY_STORAGE_KEY);
   
   if (!token || !expiryStr) {
     return null;
@@ -110,7 +111,6 @@ export function getStoredGoogleToken(): string | null {
   const expiry = parseInt(expiryStr, 10);
   const now = Date.now();
   
-  // If token is within 5 minutes of expiring (or already expired), discard it
   const safetyBuffer = 5 * 60 * 1000; 
   if (now > expiry - safetyBuffer) {
     clearStoredGoogleToken();
@@ -124,6 +124,11 @@ export function getStoredGoogleToken(): string | null {
  * Clear the Google OAuth token details from persistent storage.
  */
 export function clearStoredGoogleToken(): void {
+  const currentUser = db.getCurrentUser();
+  if (currentUser) {
+    localStorage.removeItem(`${TOKEN_STORAGE_KEY}_${currentUser.role}_${currentUser.id}`);
+    localStorage.removeItem(`${EXPIRY_STORAGE_KEY}_${currentUser.role}_${currentUser.id}`);
+  }
   localStorage.removeItem(TOKEN_STORAGE_KEY);
   localStorage.removeItem(EXPIRY_STORAGE_KEY);
 }
