@@ -110,25 +110,18 @@ export interface GoogleCalendarEvent {
 
 // Fetch events from Primary Google Calendar
 export const fetchGoogleCalendarEvents = async (token: string, timeMin?: string, timeMax?: string): Promise<GoogleCalendarEvent[]> => {
-  if (token === 'demo-google-access-token' || token.startsWith('demo-')) {
-    return [
-      {
-        id: 'cal-demo-1',
-        summary: 'Asesmen Sumatif Matematika Bab 2',
-        description: 'Asesmen Harian Matematika Kelas 5A di Lab Komputer',
-        start: { dateTime: new Date().toISOString() },
-        end: { dateTime: new Date(Date.now() + 3600000).toISOString() },
-        location: 'Ruang Kelas 5A'
-      },
-      {
-        id: 'cal-demo-2',
-        summary: 'Rapat Kombel (Komunitas Belajar) Guru SD',
-        description: 'Evaluasi Pembelajaran Berdiferensiasi Kurikulum Merdeka',
-        start: { dateTime: new Date(Date.now() + 86400000).toISOString() },
-        end: { dateTime: new Date(Date.now() + 90000000).toISOString() },
-        location: 'Ruang Guru SD'
-      }
-    ];
+  const currentUser = db.getCurrentUser();
+  const userId = currentUser ? currentUser.id : 'default';
+
+  if (token === 'demo-google-access-token' || token.startsWith('demo-') || token.startsWith('token-google-')) {
+    const key = `user_gcal_events_${userId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {}
+    }
+    return [];
   }
 
   let url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime';
@@ -157,11 +150,20 @@ export const fetchGoogleCalendarEvents = async (token: string, timeMin?: string,
 
 // Insert event into Google Calendar
 export const createGoogleCalendarEvent = async (token: string, event: GoogleCalendarEvent): Promise<GoogleCalendarEvent> => {
-  if (token === 'demo-google-access-token' || token.startsWith('demo-')) {
-    return {
-      id: `cal-demo-${Date.now()}`,
+  const currentUser = db.getCurrentUser();
+  const userId = currentUser ? currentUser.id : 'default';
+
+  if (token === 'demo-google-access-token' || token.startsWith('demo-') || token.startsWith('token-google-')) {
+    const key = `user_gcal_events_${userId}`;
+    const existingStr = localStorage.getItem(key);
+    const existing = existingStr ? JSON.parse(existingStr) : [];
+    const newEv = {
+      id: `cal-demo-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       ...event
     };
+    existing.push(newEv);
+    localStorage.setItem(key, JSON.stringify(existing));
+    return newEv;
   }
 
   const url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';

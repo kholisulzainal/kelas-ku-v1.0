@@ -140,7 +140,7 @@ export function GoogleWorkspaceModal({ isOpen, onClose }: GoogleWorkspaceModalPr
   // Manual Token & Direct Email Connection States
   const [showManualTokenInput, setShowManualTokenInput] = useState(false);
   const [manualAccessToken, setManualAccessToken] = useState('');
-  const [teacherEmailInput, setTeacherEmailInput] = useState('kholisul411@guru.sd.belajar.id');
+  const [teacherEmailInput, setTeacherEmailInput] = useState('');
 
   // Database lists
   const siswas = db.siswa.getAll();
@@ -200,7 +200,11 @@ export function GoogleWorkspaceModal({ isOpen, onClose }: GoogleWorkspaceModalPr
 
   const handleConnectTeacherEmail = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const cleanEmail = teacherEmailInput.trim() || 'kholisul411@guru.sd.belajar.id';
+    const cleanEmail = teacherEmailInput.trim();
+    if (!cleanEmail) {
+      alert('Silakan masukkan alamat email Google Anda.');
+      return;
+    }
 
     const activeUser = db.getCurrentUser();
     let displayName = 'Kholisul Zainal Asfan Sholikh, S.Pd.';
@@ -1007,7 +1011,7 @@ REKAPITULASI NILAI ASESMEN & KOMPETENSI:
                           type="email"
                           value={teacherEmailInput}
                           onChange={(e) => setTeacherEmailInput(e.target.value)}
-                          placeholder="kholisul411@guru.sd.belajar.id"
+                          placeholder="guru@sd.belajar.id"
                           className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/20"
                         />
                         <button
@@ -1056,7 +1060,7 @@ REKAPITULASI NILAI ASESMEN & KOMPETENSI:
                           type="email"
                           value={teacherEmailInput}
                           onChange={(e) => setTeacherEmailInput(e.target.value)}
-                          placeholder="kholisul411@guru.sd.belajar.id"
+                          placeholder="guru@sd.belajar.id"
                           className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/20"
                         />
                         <button

@@ -132,11 +132,12 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
       (user, token) => {
         setGoogleUser(user);
         setGoogleToken(token);
-        loadGoogleEvents(token);
+        loadGoogleEvents(token, true);
       },
       () => {
         setGoogleUser(null);
         setGoogleToken(null);
+        setGoogleEvents([]);
       }
     );
     return () => {
@@ -144,25 +145,31 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
     };
   }, [currentYear]);
 
-  const loadGoogleEvents = async (token: string) => {
+  const loadGoogleEvents = async (token: string, silent: boolean = false) => {
     setIsGCalLoading(true);
     try {
       const minDate = `${currentYear}-01-01T00:00:00Z`;
       const maxDate = `${currentYear}-12-31T23:59:59Z`;
       const events = await fetchGoogleCalendarEvents(token, minDate, maxDate);
       setGoogleEvents(events);
-      setCalendarAlert({
-        title: 'Google Kalender Terhubung',
-        message: `Berhasil menyinkronkan ${events.length} acara pribadi dari Google Kalender Anda untuk tahun ${currentYear}.`,
-        type: 'success'
-      });
+      if (!silent) {
+        setCalendarAlert({
+          title: 'Google Kalender Terhubung',
+          message: events.length > 0 
+            ? `Berhasil menyinkronkan ${events.length} acara dari Google Kalender Anda untuk tahun ${currentYear}.`
+            : `Terhubung ke Google Kalender. Tidak ada acara pribadi ditemukan untuk tahun ${currentYear}.`,
+          type: 'success'
+        });
+      }
     } catch (err: any) {
       console.error(err);
-      setCalendarAlert({
-        title: 'Gagal Memuat Google Kalender',
-        message: err.message || 'Gagal mengambil acara dari Google Kalender.',
-        type: 'error'
-      });
+      if (!silent) {
+        setCalendarAlert({
+          title: 'Gagal Memuat Google Kalender',
+          message: err.message || 'Gagal mengambil acara dari Google Kalender.',
+          type: 'error'
+        });
+      }
     } finally {
       setIsGCalLoading(false);
     }
@@ -180,7 +187,7 @@ export function IndonesianCalendar({ currentRole, currentUserId }: IndonesianCal
           linkGoogleEmailToActiveGuru(result.user.email);
         }
 
-        await loadGoogleEvents(result.accessToken);
+        await loadGoogleEvents(result.accessToken, false);
       }
     } catch (err: any) {
       console.error(err);

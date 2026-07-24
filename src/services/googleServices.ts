@@ -42,17 +42,20 @@ export function getStoredGoogleUser(): GoogleUserProfile | null {
         return JSON.parse(userProfileStr);
       } catch (e) {}
     }
-  }
 
-  if (currentUser && currentUser.role === 'guru') {
-    const guru = db.guru.getAll().find(g => g.id === currentUser.id);
-    if (guru && guru.googleEmail) {
-      return {
-        displayName: guru.namaGuru || 'Guru SD',
-        email: guru.googleEmail,
-        photoURL: guru.fotoUrl
-      };
+    if (currentUser.role === 'guru') {
+      const guru = db.guru.getAll().find(g => g.id === currentUser.id);
+      if (guru && guru.googleEmail) {
+        return {
+          displayName: guru.namaGuru || 'Guru SD',
+          email: guru.googleEmail,
+          photoURL: guru.fotoUrl
+        };
+      }
     }
+
+    // Do not leak other users' profile if currentUser is logged in
+    return null;
   }
 
   const profileStr = localStorage.getItem(USER_PROFILE_STORAGE_KEY);
@@ -98,11 +101,21 @@ export function saveGoogleToken(accessToken: string, expiresInSeconds: number = 
  */
 export function getStoredGoogleToken(): string | null {
   const currentUser = db.getCurrentUser();
-  const tokenKey = currentUser ? `${TOKEN_STORAGE_KEY}_${currentUser.role}_${currentUser.id}` : TOKEN_STORAGE_KEY;
-  const expiryKey = currentUser ? `${EXPIRY_STORAGE_KEY}_${currentUser.role}_${currentUser.id}` : EXPIRY_STORAGE_KEY;
+  let tokenKey = TOKEN_STORAGE_KEY;
+  let expiryKey = EXPIRY_STORAGE_KEY;
 
-  let token = localStorage.getItem(tokenKey) || localStorage.getItem(TOKEN_STORAGE_KEY);
-  let expiryStr = localStorage.getItem(expiryKey) || localStorage.getItem(EXPIRY_STORAGE_KEY);
+  if (currentUser) {
+    tokenKey = `${TOKEN_STORAGE_KEY}_${currentUser.role}_${currentUser.id}`;
+    expiryKey = `${EXPIRY_STORAGE_KEY}_${currentUser.role}_${currentUser.id}`;
+  }
+
+  let token = localStorage.getItem(tokenKey);
+  let expiryStr = localStorage.getItem(expiryKey);
+
+  if (!token && !currentUser) {
+    token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    expiryStr = localStorage.getItem(EXPIRY_STORAGE_KEY);
+  }
   
   if (!token || !expiryStr) {
     return null;
