@@ -138,6 +138,15 @@ create table if not exists public.profil_sekolah (
   kepala_sekolah text,
   nip_kepala_sekolah text,
   logo_url text,
+  tahun_pelajaran text,
+  jalan text,
+  rt_rw text,
+  dusun text,
+  desa text,
+  kecamatan text,
+  kabupaten text,
+  provinsi text,
+  kode_pos text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -1127,7 +1136,26 @@ export async function pullAllFromSupabase(): Promise<{ success: boolean; error?:
         } else {
           if (Array.isArray(transformed)) {
             if (transformed.length > 0) {
-              localStorage.setItem(table.localName, JSON.stringify(transformed[0]));
+              const pulledObj = transformed[0];
+              const existingLocalStr = localStorage.getItem(table.localName);
+              let existingLocalObj: any = {};
+              if (existingLocalStr) {
+                try { existingLocalObj = JSON.parse(existingLocalStr); } catch (e) {}
+              }
+
+              // Merge pulled data with existing local data, prioritizing non-empty local values if pulled field is null/undefined/empty
+              const mergedObj: any = { ...existingLocalObj };
+              Object.keys(pulledObj).forEach((k) => {
+                const val = pulledObj[k];
+                if (val !== null && val !== undefined && val !== '') {
+                  mergedObj[k] = val;
+                }
+              });
+
+              localStorage.setItem(table.localName, JSON.stringify(mergedObj));
+
+              // Sync back merged object to Supabase to ensure database receives all address and academic year fields
+              await syncRowToSupabase(table.dbName, mergedObj, true);
             } else {
               // Supabase singleton table is empty. Preserve local data and auto-push
               const existingLocal = localStorage.getItem(table.localName);
@@ -1144,7 +1172,20 @@ export async function pullAllFromSupabase(): Promise<{ success: boolean; error?:
               }
             }
           } else if (transformed && Object.keys(transformed).length > 0) {
-            localStorage.setItem(table.localName, JSON.stringify(transformed));
+            const existingLocalStr = localStorage.getItem(table.localName);
+            let existingLocalObj: any = {};
+            if (existingLocalStr) {
+              try { existingLocalObj = JSON.parse(existingLocalStr); } catch (e) {}
+            }
+            const mergedObj: any = { ...existingLocalObj };
+            Object.keys(transformed).forEach((k) => {
+              const val = transformed[k];
+              if (val !== null && val !== undefined && val !== '') {
+                mergedObj[k] = val;
+              }
+            });
+            localStorage.setItem(table.localName, JSON.stringify(mergedObj));
+            await syncRowToSupabase(table.dbName, mergedObj, true);
           }
         }
 

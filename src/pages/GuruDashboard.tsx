@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Search,
   Check,
+  CheckCircle2,
   ClipboardList,
   Key,
   Printer,
@@ -36,10 +37,14 @@ import {
   Compass,
   Landmark,
   Globe,
-  Calendar
+  Calendar,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { db } from '../services/db';
+import { syncRowToSupabase } from '../services/supabase';
 import { exportToCSV } from '../utils/export';
 import { sendNewAssignmentEmailAlerts } from '../services/googleWorkspace';
 import { getAccessToken, logoutGoogle } from '../services/googleAuth';
@@ -280,6 +285,83 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
     } catch (err: any) {
       setOpErrorMsg('Gagal memperbarui kredensial: ' + (err.message || 'Kesalahan sistem'));
     }
+  };
+
+  // Operator flexible Tahun Pelajaran state & handler
+  const [tpInput, setTpInput] = useState(() => sekolah.tahunPelajaran || '2025/2026');
+  const [tpNotice, setTpNotice] = useState('');
+
+  const handleSaveTahunPelajaran = () => {
+    const cleanTp = tpInput.trim() || '2025/2026';
+    const updated = { ...sekolah, tahunPelajaran: cleanTp };
+    db.profilSekolah.update(updated);
+    setSekolah(updated);
+    window.dispatchEvent(new Event('school-profile-updated'));
+    setTpNotice('Tahun Pelajaran berhasil disimpan!');
+    setTimeout(() => setTpNotice(''), 3000);
+  };
+
+  // Google Form Score Ingestion to Asesmen Harian states & handlers
+  const [ingestTaskModal, setIngestTaskModal] = useState<DaftarTugas | null>(null);
+  const [ingestScores, setIngestScores] = useState<{ [siswaId: string]: { nilai: string | number; deskripsi: string } }>({});
+  const [ingestNotice, setIngestNotice] = useState('');
+  const [showGFormGuide, setShowGFormGuide] = useState(false);
+
+  const handleOpenIngestModal = (task: DaftarTugas) => {
+    setIngestTaskModal(task);
+    setIngestNotice('');
+    const initialScores: { [siswaId: string]: { nilai: string | number; deskripsi: string } } = {};
+    const relevantStudents = siswas.filter(s => activeClassFilter === 'Semua' || s.kelas === activeClassFilter);
+    
+    relevantStudents.forEach(s => {
+      const existing = asesmens.find(a => 
+        a.siswaId === s.id && 
+        a.mapelId === task.mapelId && 
+        a.namaPenilaian.includes(task.judulTugas)
+      );
+      initialScores[s.id] = {
+        nilai: existing ? existing.nilai : 85,
+        deskripsi: existing?.deskripsiKompetensi || `Hasil penilaian Kuis Google Form: ${task.judulTugas}`
+      };
+    });
+    setIngestScores(initialScores);
+  };
+
+  const handleSaveIngestScores = (task: DaftarTugas) => {
+    const relevantStudents = siswas.filter(s => activeClassFilter === 'Semua' || s.kelas === activeClassFilter);
+    let savedCount = 0;
+
+    relevantStudents.forEach(s => {
+      const scoreData = ingestScores[s.id];
+      if (scoreData && scoreData.nilai !== '' && !isNaN(Number(scoreData.nilai))) {
+        const numVal = Math.min(100, Math.max(0, Math.round(Number(scoreData.nilai))));
+        const newAsesmen: Asesmen = {
+          id: `as-gform-${task.id}-${s.id}`,
+          siswaId: s.id,
+          mapelId: task.mapelId,
+          tipe: 'harian',
+          namaPenilaian: `Google Form: ${task.judulTugas}`,
+          nilai: numVal,
+          deskripsiKompetensi: scoreData.deskripsi || `Hasil penilaian Kuis Google Form: ${task.judulTugas}`,
+          tanggalPenilaian: new Date().toISOString().split('T')[0],
+          dinilaiOlehId: currentUser?.id || 'guru-1',
+          kelas: s.kelas
+        };
+        db.asesmen.upsert(newAsesmen);
+        syncRowToSupabase('asesmen', newAsesmen).catch(err => console.warn(err));
+        savedCount++;
+      }
+    });
+
+    setAsesmens(db.asesmen.getAll());
+    window.dispatchEvent(new Event('asesmens-updated'));
+    window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+
+    setIngestNotice(`Berhasil memasukkan ${savedCount} nilai siswa ke Data Nilai Asesmen Harian!`);
+    setTimeout(() => {
+      setIngestNotice('');
+      setIngestTaskModal(null);
+    }, 1800);
   };
 
   const [customAlert, setCustomAlert] = useState<{
@@ -3503,7 +3585,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
 
   return (
     <div id="guru_dashboard_container" className="space-y-6">
-      {/* Operator Academic Year Banner (Harmonized Default Theme) */}
+      {/* Operator Academic Year Banner (Flexible Input + Dedicated Save Button) */}
       {isOperator && (
         <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
@@ -3516,6 +3598,11 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 <span className="px-3 py-0.5 bg-m3-lavender dark:bg-indigo-950/40 text-m3-purple dark:text-indigo-400 font-bold text-xs rounded-full">
                   {sekolah.tahunPelajaran || '2025/2026'}
                 </span>
+                {tpNotice && (
+                  <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs rounded-full">
+                    {tpNotice}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Tahun pelajaran disinkronkan secara otomatis pada seluruh laporan rekapitulasi, cetak dokumen, dan ekspor PDF.
@@ -3523,27 +3610,28 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 px-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 ml-auto">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Pilih Tahun Pelajaran:</span>
-            <select
-              value={sekolah.tahunPelajaran || '2025/2026'}
-              onChange={(e) => {
-                const newTp = e.target.value;
-                const updated = { ...sekolah, tahunPelajaran: newTp };
-                db.profilSekolah.update(updated);
-                setSekolah(updated);
-                window.dispatchEvent(new Event('school-profile-updated'));
-              }}
-              className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-m3-purple/20 cursor-pointer"
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveTahunPelajaran();
+            }}
+            className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 px-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 ml-auto flex-wrap sm:flex-nowrap"
+          >
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Tahun Pelajaran:</span>
+            <input
+              type="text"
+              value={tpInput}
+              onChange={(e) => setTpInput(e.target.value)}
+              placeholder="Contoh: 2025/2026"
+              className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-m3-purple/20 min-w-[150px]"
+            />
+            <button
+              type="submit"
+              className="bg-m3-purple hover:bg-m3-purple-dark text-white font-bold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer shadow-sm transition-colors whitespace-nowrap"
             >
-              <option value="2023/2024">2023/2024</option>
-              <option value="2024/2025">2024/2025</option>
-              <option value="2025/2026">2025/2026</option>
-              <option value="2026/2027">2026/2027</option>
-              <option value="2027/2028">2027/2028</option>
-              <option value="2028/2029">2028/2029</option>
-            </select>
-          </div>
+              Simpan
+            </button>
+          </form>
         </div>
       )}
 
@@ -3719,22 +3807,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Tahun Pelajaran Aktif</label>
-                  <select
-                    disabled={!isCurrentGuruWaliKelas}
-                    defaultValue={sekolah.tahunPelajaran || '2025/2026'}
-                    {...register('tahunPelajaran')}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold text-indigo-600 dark:text-indigo-400 disabled:opacity-75 disabled:cursor-not-allowed"
-                  >
-                    <option value="2023/2024">2023/2024</option>
-                    <option value="2024/2025">2024/2025</option>
-                    <option value="2025/2026">2025/2026</option>
-                    <option value="2026/2027">2026/2027</option>
-                    <option value="2027/2028">2027/2028</option>
-                    <option value="2028/2029">2028/2029</option>
-                  </select>
-                </div>
+
 
                 <div className="md:col-span-2 space-y-3 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800/80">
                   <div className="border-b border-slate-100 dark:border-slate-800 pb-1.5">
@@ -5378,20 +5451,83 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
         <div id="google_form_tasks_view" className="space-y-4">
           {renderClassFilterBar()}
 
-          <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm">
+          <div className="flex flex-wrap justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-800 dark:text-white">Penugasan Terintegrasi Google Form</h3>
               <p className="text-xs text-slate-500">Berikan tugas berbasis web formulir Google Form, rilis notifikasi instan</p>
             </div>
-            <button
-              id="add_tugas_btn"
-              onClick={handleOpenAddModal}
-              className="bg-m3-purple text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-m3-purple-dark shadow-md"
-            >
-              <Plus className="w-4 h-4" />
-              Buat Tugas Baru
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowGFormGuide(!showGFormGuide)}
+                className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <HelpCircle className="w-4 h-4 text-m3-purple" />
+                <span>Petunjuk Google Form</span>
+                {showGFormGuide ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                id="add_tugas_btn"
+                onClick={handleOpenAddModal}
+                className="bg-m3-purple text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-m3-purple-dark shadow-md"
+              >
+                <Plus className="w-4 h-4" />
+                Buat Tugas Baru
+              </button>
+            </div>
           </div>
+
+          {/* Interactive Guide Banner */}
+          {showGFormGuide && (
+            <div className="bg-gradient-to-br from-indigo-50/80 to-purple-50/80 dark:from-slate-900 dark:to-indigo-950/40 p-5 rounded-3xl border border-indigo-100 dark:border-indigo-900/50 shadow-sm space-y-4 animate-fade-in text-xs text-slate-700 dark:text-slate-300">
+              <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-300 font-bold text-sm border-b border-indigo-100 dark:border-indigo-900/50 pb-2">
+                <HelpCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <span>Panduan Lengkap Pembuatan & Sinkronisasi Google Form</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-slate-800 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-white">
+                    <span className="w-5 h-5 rounded-full bg-m3-purple text-white text-[11px] flex items-center justify-center font-bold">1</span>
+                    <span>Aktifkan Mode Kuis di Google Form</span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed pl-7">
+                    Buka Google Form Anda → Masuk ke menu <strong>Setelan (Settings)</strong> → Aktifkan <strong>"Jadikan ini kuis" (Make this a quiz)</strong>. Atur poin untuk setiap soal secara otomatis.
+                  </p>
+                </div>
+
+                <div className="bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-slate-800 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-white">
+                    <span className="w-5 h-5 rounded-full bg-m3-purple text-white text-[11px] flex items-center justify-center font-bold">2</span>
+                    <span>Wajibkan Isian Identitas Siswa</span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed pl-7">
+                    Tambahkan pertanyaan wajib untuk <strong>Nama Lengkap</strong> dan <strong>NISN / Kelas</strong> agar Anda dapat mencocokkan hasil jawaban siswa dengan mudah.
+                  </p>
+                </div>
+
+                <div className="bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-slate-800 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-white">
+                    <span className="w-5 h-5 rounded-full bg-m3-purple text-white text-[11px] flex items-center justify-center font-bold">3</span>
+                    <span>Salin & Sematkan Tautan Publik (Kirim)</span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed pl-7">
+                    Klik tombol <strong>Kirim (Send)</strong> di Google Form → Pilih ikon tautan (link) → Salin URL formulir, lalu tempelkan pada kolom <strong>"Tautan Google Form"</strong> saat membuat Tugas Baru di aplikasi ini.
+                  </p>
+                </div>
+
+                <div className="bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-slate-800 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-white">
+                    <span className="w-5 h-5 rounded-full bg-m3-purple text-white text-[11px] flex items-center justify-center font-bold">4</span>
+                    <span>Olah & Sync Hasil ke Asesmen Harian</span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed pl-7">
+                    Setelah siswa mengerjakan, klik tombol <span className="text-emerald-600 font-bold">"Olah & Sync Nilai ke Asesmen Harian"</span> pada kartu tugas di bawah untuk memasukkan nilai secara instan ke dalam rekapitulasi Asesmen Harian.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {tugases
@@ -5466,17 +5602,27 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                     </div>
                   </div>
 
-                  <div className="mt-6 border-t border-m3-border dark:border-slate-800/50 pt-4">
-                    <div className="flex justify-between items-center text-xs text-slate-500 mb-1.5">
-                      <span>Progres Penyelesaian Siswa</span>
-                      <span className="font-bold text-slate-800 dark:text-white">{completedCount} dari {totalCount} Selesai</span>
+                  <div className="mt-6 border-t border-m3-border dark:border-slate-800/50 pt-4 space-y-3">
+                    <div>
+                      <div className="flex justify-between items-center text-xs text-slate-500 mb-1.5">
+                        <span>Progres Penyelesaian Siswa</span>
+                        <span className="font-bold text-slate-800 dark:text-white">{completedCount} dari {totalCount} Selesai</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-m3-purple h-full rounded-full transition-all"
+                          style={{ width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }}
+                        ></div>
+                      </div>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                      <div
-                        className="bg-m3-purple h-full rounded-full transition-all"
-                        style={{ width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }}
-                      ></div>
-                    </div>
+
+                    <button
+                      onClick={() => handleOpenIngestModal(t)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition-colors"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Olah & Sync Nilai ke Asesmen Harian</span>
+                    </button>
                   </div>
                 </div>
               );
@@ -7378,6 +7524,117 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-6 py-3 rounded-xl cursor-pointer shadow-md transition-colors"
               >
                 Saya Mengerti & Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GOOGLE FORM INGESTION MODAL FOR ASESMEN HARIAN */}
+      {ingestTaskModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full">
+                  Penilaian Kuis Google Form
+                </span>
+                <h3 className="text-base font-bold text-slate-800 dark:text-white mt-1">
+                  {ingestTaskModal.judulTugas}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Olah hasil pengerjaan Google Form dan masukkan otomatis ke nilai Asesmen Harian siswa.
+                </p>
+              </div>
+              <button
+                onClick={() => setIngestTaskModal(null)}
+                className="text-slate-400 hover:text-slate-600 text-xl font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {ingestNotice && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-fade-in">
+                {ingestNotice}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-xs text-slate-600 dark:text-slate-400">
+                <span>Daftar Siswa Kelas {activeClassFilter}:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const relevantStudents = siswas.filter(s => activeClassFilter === 'Semua' || s.kelas === activeClassFilter);
+                    const updated = { ...ingestScores };
+                    relevantStudents.forEach(s => {
+                      updated[s.id] = { nilai: 80, deskripsi: `Hasil penilaian Kuis Google Form: ${ingestTaskModal.judulTugas}` };
+                    });
+                    setIngestScores(updated);
+                  }}
+                  className="text-m3-purple dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                >
+                  Isi Nilai Standar KKM (80)
+                </button>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+                {siswas
+                  .filter(s => activeClassFilter === 'Semua' || s.kelas === activeClassFilter)
+                  .map(s => {
+                    const val = ingestScores[s.id]?.nilai !== undefined ? ingestScores[s.id].nilai : '';
+                    const desc = ingestScores[s.id]?.deskripsi || '';
+                    return (
+                      <div key={s.id} className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-800 dark:text-white truncate">{s.namaSiswa}</p>
+                          <p className="text-[10px] text-slate-400">NISN: {s.nisn || '-'} | Kelas {s.kelas}</p>
+                        </div>
+
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <div className="w-28">
+                            <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Nilai (0-100)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={val}
+                              onChange={(e) => {
+                                setIngestScores({
+                                  ...ingestScores,
+                                  [s.id]: {
+                                    nilai: e.target.value,
+                                    deskripsi: desc || `Hasil penilaian Kuis Google Form: ${ingestTaskModal.judulTugas}`
+                                  }
+                                });
+                              }}
+                              placeholder="0"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-center text-slate-800 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIngestTaskModal(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveIngestScores(ingestTaskModal)}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl cursor-pointer shadow-sm transition-colors flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Simpan Seluruh Nilai ke Asesmen Harian</span>
               </button>
             </div>
           </div>
