@@ -14,11 +14,12 @@ import {
   UserRole
 } from '../types';
 import { syncRowToSupabase, deleteRowFromSupabase } from './supabase';
+import { uploadFileToSupabaseStorage } from './storage.service';
 
-// Default initial mock data - NO default sample address text
+// Empty default data structures (No hardcoded dummy/sample records)
 const defaultProfilSekolah: ProfilSekolah = {
   id: 'sch-001',
-  namaSekolah: 'SD NEGERI KITA',
+  namaSekolah: '',
   npsn: '',
   alamat: '',
   akreditasi: 'A',
@@ -37,133 +38,54 @@ const defaultProfilSekolah: ProfilSekolah = {
 };
 
 const defaultGuru: Guru[] = [];
-
 const defaultSiswa: Siswa[] = [];
-
 const defaultOrangTua: OrangTua[] = [];
-
-const defaultMataPelajaran: MataPelajaran[] = [
-  { id: 'mapel-1', kodeMapel: 'PPKN', namaMapel: 'Pendidikan Pancasila', kkm: 75 },
-  { id: 'mapel-2', kodeMapel: 'BINDO', namaMapel: 'Bahasa Indonesia', kkm: 75 },
-  { id: 'mapel-3', kodeMapel: 'MTK', namaMapel: 'Matematika', kkm: 70 },
-  { id: 'mapel-4', kodeMapel: 'IPAS', namaMapel: 'IPAS (IPA & IPS)', kkm: 72 },
-  { id: 'mapel-5', kodeMapel: 'PAIBP', namaMapel: 'Pendidikan Agama & Budi Pekerti', kkm: 75 },
-  { id: 'mapel-6', kodeMapel: 'SBDP', namaMapel: 'Seni Budaya & Prakarya', kkm: 75 },
-  { id: 'mapel-7', kodeMapel: 'PJOK', namaMapel: 'PJOK', kkm: 75 },
-  { id: 'mapel-8', kodeMapel: 'BING', namaMapel: 'Bahasa Inggris', kkm: 70 }
-];
-
-const defaultJadwalPelajaran: JadwalPelajaran[] = [
-  { id: 'jadwal-1', mapelId: 'mapel-1', hari: 'Senin', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
-  { id: 'jadwal-2', mapelId: 'mapel-2', hari: 'Senin', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
-  { id: 'jadwal-3', mapelId: 'mapel-3', hari: 'Selasa', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
-  { id: 'jadwal-4', mapelId: 'mapel-4', hari: 'Selasa', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
-  { id: 'jadwal-5', mapelId: 'mapel-5', hari: 'Rabu', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Agama', kelas: 'Kelas 4' },
-  { id: 'jadwal-6', mapelId: 'mapel-6', hari: 'Rabu', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Seni', kelas: 'Kelas 4' },
-  { id: 'jadwal-7', mapelId: 'mapel-7', hari: 'Kamis', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Lapangan Olahraga', kelas: 'Kelas 4' },
-  { id: 'jadwal-8', mapelId: 'mapel-8', hari: 'Kamis', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Bahasa', kelas: 'Kelas 4' },
-  { id: 'jadwal-9', mapelId: 'mapel-2', hari: 'Jumat', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
-  { id: 'jadwal-10', mapelId: 'mapel-1', hari: 'Jumat', jamMulai: '09:15', jamSelesai: '10:30', ruangan: 'Ruang Kelas', kelas: 'Kelas 4' },
-  // Default items for Kelas 5
-  { id: 'jadwal-11', mapelId: 'mapel-3', hari: 'Senin', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas 5' },
-  { id: 'jadwal-12', mapelId: 'mapel-4', hari: 'Senin', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas 5' },
-  { id: 'jadwal-13', mapelId: 'mapel-1', hari: 'Selasa', jamMulai: '07:30', jamSelesai: '09:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas 5' },
-  { id: 'jadwal-14', mapelId: 'mapel-2', hari: 'Selasa', jamMulai: '09:15', jamSelesai: '11:00', ruangan: 'Ruang Kelas 5', kelas: 'Kelas 5' }
-];
-
+const defaultMataPelajaran: MataPelajaran[] = [];
+const defaultJadwalPelajaran: JadwalPelajaran[] = [];
 const defaultAbsensi: Absensi[] = [];
-
 const defaultDaftarTugas: DaftarTugas[] = [];
-
 const defaultTugasSiswa: TugasSiswa[] = [];
-
 const defaultAsesmen: Asesmen[] = [];
-
 const defaultTemuanKhusus: TemuanKhusus[] = [];
-
 const defaultNotifikasi: Notifikasi[] = [];
 
-// Database state initializer
+// Database state initializer (Strictly without dummy data injections)
 const initDatabase = () => {
-  localStorage.setItem('bulk_sample_data_purged_v2', 'true');
-
-  const storedProfile = localStorage.getItem('profil_sekolah');
-  if (!storedProfile || storedProfile === '{}' || JSON.parse(storedProfile).namaSekolah === undefined) {
+  if (!localStorage.getItem('profil_sekolah')) {
     localStorage.setItem('profil_sekolah', JSON.stringify(defaultProfilSekolah));
-  } else {
-    try {
-      const parsed = JSON.parse(storedProfile);
-      // Clean out legacy sample address text if present
-      if (parsed.jalan === 'Jl. Pemuda No. 45' || parsed.alamat?.includes('Jl. Pemuda No. 45') || parsed.namaSekolah === 'SD Negeri Harapan Bangsa IA') {
-        const cleanedProfile = {
-          ...parsed,
-          namaSekolah: parsed.namaSekolah === 'SD Negeri Harapan Bangsa IA' ? 'SD NEGERI KITA' : parsed.namaSekolah,
-          alamat: parsed.alamat?.includes('Jl. Pemuda No. 45') ? '' : (parsed.alamat || ''),
-          jalan: parsed.jalan === 'Jl. Pemuda No. 45' ? '' : (parsed.jalan || ''),
-          rtRw: parsed.rtRw === 'RT 02/RW 05' ? '' : (parsed.rtRw || ''),
-          dusun: parsed.dusun === 'Dusun Melati' ? '' : (parsed.dusun || ''),
-          desa: parsed.desa === 'Desa Sukamaju' ? '' : (parsed.desa || ''),
-          kecamatan: parsed.kecamatan === 'Sukamaju' ? '' : (parsed.kecamatan || ''),
-          kabupaten: parsed.kabupaten === 'Kota Bandung' ? '' : (parsed.kabupaten || ''),
-          provinsi: parsed.provinsi === 'Jawa Barat' ? '' : (parsed.provinsi || ''),
-          kodePos: parsed.kodePos === '40123' ? '' : (parsed.kodePos || ''),
-          kepalaSekolah: parsed.kepalaSekolah === 'Dr. H. Mulyadi, M.Pd.' ? '' : (parsed.kepalaSekolah || ''),
-          nipKepalaSekolah: parsed.nipKepalaSekolah === '197408122001121003' ? '' : (parsed.nipKepalaSekolah || ''),
-        };
-        localStorage.setItem('profil_sekolah', JSON.stringify(cleanedProfile));
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  // Purge legacy sample seed absensi
-  const storedAbsensi = localStorage.getItem('absensi');
-  if (storedAbsensi) {
-    try {
-      const parsedAbs = JSON.parse(storedAbsensi);
-      if (Array.isArray(parsedAbs)) {
-        const filteredAbs = parsedAbs.filter((a: any) => !a.id?.startsWith('absen-seed-'));
-        if (filteredAbs.length !== parsedAbs.length) {
-          localStorage.setItem('absensi', JSON.stringify(filteredAbs));
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
   }
   if (!localStorage.getItem('guru')) {
-    localStorage.setItem('guru', JSON.stringify(defaultGuru));
+    localStorage.setItem('guru', '[]');
   }
   if (!localStorage.getItem('siswa')) {
-    localStorage.setItem('siswa', JSON.stringify(defaultSiswa));
+    localStorage.setItem('siswa', '[]');
   }
   if (!localStorage.getItem('orang_tua')) {
-    localStorage.setItem('orang_tua', JSON.stringify(defaultOrangTua));
+    localStorage.setItem('orang_tua', '[]');
   }
   if (!localStorage.getItem('mata_pelajaran')) {
-    localStorage.setItem('mata_pelajaran', JSON.stringify(defaultMataPelajaran));
+    localStorage.setItem('mata_pelajaran', '[]');
   }
   if (!localStorage.getItem('jadwal_pelajaran')) {
-    localStorage.setItem('jadwal_pelajaran', JSON.stringify(defaultJadwalPelajaran));
+    localStorage.setItem('jadwal_pelajaran', '[]');
   }
   if (!localStorage.getItem('absensi')) {
-    localStorage.setItem('absensi', JSON.stringify(defaultAbsensi));
+    localStorage.setItem('absensi', '[]');
   }
   if (!localStorage.getItem('daftar_tugas')) {
-    localStorage.setItem('daftar_tugas', JSON.stringify(defaultDaftarTugas));
+    localStorage.setItem('daftar_tugas', '[]');
   }
   if (!localStorage.getItem('tugas_siswa')) {
-    localStorage.setItem('tugas_siswa', JSON.stringify(defaultTugasSiswa));
+    localStorage.setItem('tugas_siswa', '[]');
   }
   if (!localStorage.getItem('asesmen')) {
-    localStorage.setItem('asesmen', JSON.stringify(defaultAsesmen));
+    localStorage.setItem('asesmen', '[]');
   }
   if (!localStorage.getItem('temuan_khusus')) {
-    localStorage.setItem('temuan_khusus', JSON.stringify(defaultTemuanKhusus));
+    localStorage.setItem('temuan_khusus', '[]');
   }
   if (!localStorage.getItem('notifikasi')) {
-    localStorage.setItem('notifikasi', JSON.stringify(defaultNotifikasi));
+    localStorage.setItem('notifikasi', '[]');
   }
   if (!localStorage.getItem('current_user_role')) {
     localStorage.setItem('current_user_role', 'operator');
@@ -172,7 +94,7 @@ const initDatabase = () => {
     localStorage.setItem('current_user_id', 'operator-id'); 
   }
   if (!localStorage.getItem('is_logged_in')) {
-    localStorage.setItem('is_logged_in', 'false'); // require login by default
+    localStorage.setItem('is_logged_in', 'false');
   }
 };
 
@@ -766,14 +688,17 @@ export const db = {
     }
   },
 
-  // Simulating image upload by converting to local base64 / using standard Unsplash avatars
-  uploadPhoto: async (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        resolve(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    });
+  // Direct upload to Supabase Storage Bucket returning public persistent URL
+  uploadPhoto: async (file: File, bucketName: string = 'avatars'): Promise<string> => {
+    try {
+      const res = await uploadFileToSupabaseStorage(bucketName, file);
+      if (res.success && res.url) {
+        return res.url;
+      }
+      throw new Error(res.error || 'Gagal mengunggah file ke Supabase Storage');
+    } catch (err) {
+      console.error('[DB UploadPhoto] Error uploading to Supabase Storage:', err);
+      throw err;
+    }
   }
 };

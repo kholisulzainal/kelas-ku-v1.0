@@ -115,20 +115,28 @@ export function resetSupabaseInstance() {
 }
 
 // SQL Script generator for the user to copy-paste into Supabase SQL Editor
-export const MIGRATION_SQL = `-- SCRIPT INI DI-GENERATE OTOMATIS UNTUK MEMBUAT SCHEMA DATABASE KURIKULUM MERDEKA DI SUPABASE.
+export const MIGRATION_SQL = `-- SKEMA DATABASE SUPABASE PRODUKSI "KELAS KU"
 -- Copy script ini, buka Dashboard Supabase -> SQL Editor -> klik "New query" -> Paste & Run!
 
--- 1. Tabel Profil Sekolah
-create table if not exists public.profil_sekolah (
-  id text primary key,
-  nama_sekolah text not null,
-  npsn text,
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM ('operator', 'guru_mapel', 'wali_kelas', 'siswa', 'ortu');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- 1. Profil Sekolah
+CREATE TABLE IF NOT EXISTS public.profil_sekolah (
+  id text PRIMARY KEY DEFAULT 'sch-001',
+  nama_sekolah text NOT NULL,
+  npsn text UNIQUE,
   alamat text,
-  akreditasi text,
+  akreditasi text DEFAULT 'A',
   kepala_sekolah text,
   nip_kepala_sekolah text,
   logo_url text,
-  tahun_pelajaran text,
+  tahun_pelajaran text DEFAULT '2025/2026',
   jalan text,
   rt_rw text,
   dusun text,
@@ -137,175 +145,207 @@ create table if not exists public.profil_sekolah (
   kabupaten text,
   provinsi text,
   kode_pos text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Tabel Guru
-create table if not exists public.guru (
-  id text primary key,
-  nip text unique not null,
-  nama_guru text not null,
+-- 2. User Profiles
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email text UNIQUE NOT NULL,
+  nama_lengkap text NOT NULL,
+  role user_role NOT NULL DEFAULT 'guru_mapel',
+  avatar_url text,
+  no_telepon text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3. Data Guru
+CREATE TABLE IF NOT EXISTS public.guru (
+  id text PRIMARY KEY DEFAULT ('guru-' || extract(epoch from now())::bigint),
+  profile_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  nip text UNIQUE NOT NULL,
+  nama_guru text NOT NULL,
   gelar text,
   mata_pelajaran_utama text,
   foto_url text,
-  status_kepegawaian text,
-  password text not null default 'guru123',
-  is_wali_kelas boolean default false,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  status_kepegawaian text DEFAULT 'PNS/P3K/Honor',
+  password text NOT NULL DEFAULT 'guru123',
+  is_wali_kelas boolean DEFAULT false,
+  kelas_wali text,
+  google_email text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 3. Tabel Siswa
-create table if not exists public.siswa (
-  id text primary key,
-  nisn text unique not null,
-  nis text,
-  nama_siswa text not null,
-  jenis_kelamin text,
-  kelas text not null default 'Kelas 4-A',
+-- 4. Data Kelas
+CREATE TABLE IF NOT EXISTS public.data_kelas (
+  id text PRIMARY KEY DEFAULT ('kelas-' || extract(epoch from now())::bigint),
+  nama_kelas text UNIQUE NOT NULL,
+  tingkat integer DEFAULT 4,
+  wali_kelas_id text REFERENCES public.guru(id) ON DELETE SET NULL,
+  tahun_ajaran text DEFAULT '2025/2026',
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 5. Data Siswa
+CREATE TABLE IF NOT EXISTS public.siswa (
+  id text PRIMARY KEY DEFAULT ('siswa-' || extract(epoch from now())::bigint),
+  profile_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  nisn text UNIQUE NOT NULL,
+  nis text UNIQUE,
+  nama_siswa text NOT NULL,
+  jenis_kelamin text CHECK (jenis_kelamin IN ('L', 'P')),
+  kelas text NOT NULL DEFAULT 'Kelas 4-A',
+  kelas_id text REFERENCES public.data_kelas(id) ON DELETE SET NULL,
   alamat text,
   foto_url text,
   nama_ayah text,
   nama_ibu text,
   no_telepon_ortu text,
-  password text not null default 'siswa123',
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  password text NOT NULL DEFAULT 'siswa123',
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 4. Tabel Orang Tua
-create table if not exists public.orang_tua (
-  id text primary key,
-  nama_ortu text not null,
-  siswa_id text references public.siswa(id) on delete cascade,
-  hubungan text,
+-- 6. Data Orang Tua
+CREATE TABLE IF NOT EXISTS public.orang_tua (
+  id text PRIMARY KEY DEFAULT ('ortu-' || extract(epoch from now())::bigint),
+  profile_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  nama_ortu text NOT NULL,
+  siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE,
+  hubungan text DEFAULT 'Ayah/Ibu/Wali',
   no_telepon text,
-  password text not null default 'ortu123',
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  password text NOT NULL DEFAULT 'ortu123',
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 5. Tabel Mata Pelajaran
-create table if not exists public.mata_pelajaran (
-  id text primary key,
-  kode_mapel text unique not null,
-  nama_mapel text not null,
-  kkm integer not null default 75,
-  guru_pengampu_id text references public.guru(id) on delete set null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+-- 7. Mata Pelajaran
+CREATE TABLE IF NOT EXISTS public.mata_pelajaran (
+  id text PRIMARY KEY DEFAULT ('mapel-' || extract(epoch from now())::bigint),
+  kode_mapel text UNIQUE NOT NULL,
+  nama_mapel text NOT NULL,
+  kkm integer NOT NULL DEFAULT 75,
+  guru_pengampu_id text REFERENCES public.guru(id) ON DELETE SET NULL,
+  kelas text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 6. Tabel Jadwal Pelajaran
-create table if not exists public.jadwal_pelajaran (
-  id text primary key,
-  mapel_id text references public.mata_pelajaran(id) on delete cascade,
-  hari text not null,
-  jam_mulai text not null,
-  jam_selesai text not null,
-  ruangan text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+-- 8. Jadwal Pelajaran
+CREATE TABLE IF NOT EXISTS public.jadwal_pelajaran (
+  id text PRIMARY KEY DEFAULT ('jadwal-' || extract(epoch from now())::bigint),
+  mapel_id text REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
+  hari text NOT NULL,
+  jam_mulai text NOT NULL,
+  jam_selesai text NOT NULL,
+  ruangan text DEFAULT 'Ruang Kelas',
+  kelas text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 7. Tabel Absensi
-create table if not exists public.absensi (
-  id text primary key,
-  siswa_id text references public.siswa(id) on delete cascade,
-  tanggal text not null,
-  status text not null,
+-- 9. Absensi Siswa
+CREATE TABLE IF NOT EXISTS public.absensi (
+  id text PRIMARY KEY DEFAULT ('abs-' || extract(epoch from now())::bigint),
+  siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
+  tanggal text NOT NULL,
+  status text NOT NULL,
   keterangan text,
-  dicatat_oleh_id text references public.guru(id) on delete set null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  dicatat_oleh_id text REFERENCES public.guru(id) ON DELETE SET NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  CONSTRAINT unique_siswa_tanggal UNIQUE (siswa_id, tanggal)
 );
 
--- 8. Tabel Daftar Tugas
-create table if not exists public.daftar_tugas (
-  id text primary key,
-  mapel_id text references public.mata_pelajaran(id) on delete cascade,
-  judul_tugas text not null,
+-- 10. Daftar Tugas
+CREATE TABLE IF NOT EXISTS public.daftar_tugas (
+  id text PRIMARY KEY DEFAULT ('tugas-' || extract(epoch from now())::bigint),
+  mapel_id text REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
+  judul_tugas text NOT NULL,
   deskripsi text,
-  google_form_url text not null,
-  tanggal_diberikan text not null,
+  google_form_url text NOT NULL,
+  tanggal_diberikan text NOT NULL,
   tenggat_waktu text,
-  dibuat_oleh_id text references public.guru(id) on delete set null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  dibuat_oleh_id text REFERENCES public.guru(id) ON DELETE SET NULL,
+  kelas text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 9. Tabel Tugas Siswa
-create table if not exists public.tugas_siswa (
-  id text primary key,
-  tugas_id text references public.daftar_tugas(id) on delete cascade,
-  siswa_id text references public.siswa(id) on delete cascade,
-  status_pengerjaan boolean default false,
+-- 11. Tugas Siswa
+CREATE TABLE IF NOT EXISTS public.tugas_siswa (
+  id text PRIMARY KEY DEFAULT ('ts-' || extract(epoch from now())::bigint),
+  tugas_id text REFERENCES public.daftar_tugas(id) ON DELETE CASCADE NOT NULL,
+  siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
+  status_pengerjaan boolean DEFAULT false,
   tanggal_dikerjakan text,
-  nilai integer,
+  nilai integer CHECK (nilai >= 0 AND nilai <= 100),
   umpan_balik text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  CONSTRAINT unique_tugas_siswa UNIQUE (tugas_id, siswa_id)
 );
 
--- 10. Tabel Asesmen (Nilai Utama)
-create table if not exists public.asesmen (
-  id text primary key,
-  siswa_id text references public.siswa(id) on delete cascade,
-  mapel_id text references public.mata_pelajaran(id) on delete cascade,
-  tipe text not null,
-  nama_penilaian text not null,
-  nilai integer not null,
+-- 12. Asesmen / Rekap Nilai
+CREATE TABLE IF NOT EXISTS public.asesmen (
+  id text PRIMARY KEY DEFAULT ('as-' || extract(epoch from now())::bigint),
+  siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
+  mapel_id text REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
+  tipe text NOT NULL DEFAULT 'harian',
+  nama_penilaian text NOT NULL,
+  nilai integer NOT NULL CHECK (nilai >= 0 AND nilai <= 100),
   deskripsi_kompetensi text,
-  tanggal_penilaian text not null,
-  dinilai_oleh_id text references public.guru(id) on delete set null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  tanggal_penilaian text NOT NULL,
+  dinilai_oleh_id text REFERENCES public.guru(id) ON DELETE SET NULL,
+  kelas text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 11. Tabel Temuan Khusus
-create table if not exists public.temuan_khusus (
-  id text primary key,
-  siswa_id text references public.siswa(id) on delete cascade,
-  tanggal text not null,
-  kategori text not null,
-  deskripsi text not null,
+-- 13. Temuan Khusus
+CREATE TABLE IF NOT EXISTS public.temuan_khusus (
+  id text PRIMARY KEY DEFAULT ('tk-' || extract(epoch from now())::bigint),
+  siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
+  tanggal text NOT NULL,
+  kategori text NOT NULL,
+  deskripsi text NOT NULL,
   tindakan_lanjut text,
-  dilaporkan_oleh_id text references public.guru(id) on delete set null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  dilaporkan_oleh_id text REFERENCES public.guru(id) ON DELETE SET NULL,
+  kelas text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 12. Tabel Notifikasi
-create table if not exists public.notifikasi (
-  id text primary key,
-  penerima_role text not null,
+-- 14. Notifikasi
+CREATE TABLE IF NOT EXISTS public.notifikasi (
+  id text PRIMARY KEY DEFAULT ('notif-' || extract(epoch from now())::bigint),
+  penerima_role text NOT NULL,
   penerima_user_id text,
-  judul text not null,
-  pesan text not null,
-  tanggal text not null,
-  dibaca boolean default false,
-  tugas_id text references public.daftar_tugas(id) on delete set null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  judul text NOT NULL,
+  pesan text NOT NULL,
+  tanggal text NOT NULL,
+  dibaca boolean DEFAULT false,
+  tugas_id text REFERENCES public.daftar_tugas(id) ON DELETE SET NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 13. Tabel News
-create table if not exists public.news (
-  id text primary key,
-  judul text not null,
-  konten text not null,
-  kategori text default 'Pengumuman',
-  penulis text default 'Admin',
+-- 15. News & Gallery & Settings
+CREATE TABLE IF NOT EXISTS public.news (
+  id text PRIMARY KEY DEFAULT ('news-' || extract(epoch from now())::bigint),
+  judul text NOT NULL,
+  konten text NOT NULL,
+  kategori text DEFAULT 'Pengumuman',
+  penulis text DEFAULT 'Admin',
   tanggal text,
   thumbnail_url text,
-  published boolean default true,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  published boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 14. Tabel Gallery
-create table if not exists public.gallery (
-  id text primary key,
-  judul text not null,
+CREATE TABLE IF NOT EXISTS public.gallery (
+  id text PRIMARY KEY DEFAULT ('gal-' || extract(epoch from now())::bigint),
+  judul text NOT NULL,
   deskripsi text,
-  image_url text not null,
-  kategori text default 'Kegiatan',
+  image_url text NOT NULL,
+  kategori text DEFAULT 'Kegiatan',
   tanggal text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 15. Tabel Application Settings
-create table if not exists public.application_settings (
-  id text primary key,
-  theme text default 'light',
+CREATE TABLE IF NOT EXISTS public.application_settings (
+  id text PRIMARY KEY DEFAULT 'app-settings-001',
+  theme text DEFAULT 'light',
   primary_color text,
   secondary_color text,
   website_title text,
@@ -313,103 +353,62 @@ create table if not exists public.application_settings (
   vision text,
   mission text,
   welcome_message text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 16. Tabel PPDB
-create table if not exists public.ppdb (
-  id text primary key,
-  nama_lengkap text not null,
+CREATE TABLE IF NOT EXISTS public.ppdb (
+  id text PRIMARY KEY DEFAULT ('ppdb-' || extract(epoch from now())::bigint),
+  nama_lengkap text NOT NULL,
   nisn text,
-  jenis_kelamin text default 'L',
+  jenis_kelamin text DEFAULT 'L',
   tempat_lahir text,
   tanggal_lahir text,
   nama_ayah text,
   nama_ibu text,
   no_telepon_ortu text,
   alamat text,
-  status_pendaftaran text default 'Daftar',
+  status_pendaftaran text DEFAULT 'Daftar',
   dokumen_url text,
   foto_url text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Izinkan akses publik (Row Level Security dinonaktifkan untuk mempermudah sinkronisasi awal)
-alter table public.profil_sekolah disable row level security;
-alter table public.guru disable row level security;
-alter table public.siswa disable row level security;
-alter table public.orang_tua disable row level security;
-alter table public.mata_pelajaran disable row level security;
-alter table public.jadwal_pelajaran disable row level security;
-alter table public.absensi disable row level security;
-alter table public.daftar_tugas disable row level security;
-alter table public.tugas_siswa disable row level security;
-alter table public.asesmen disable row level security;
-alter table public.temuan_khusus disable row level security;
-alter table public.notifikasi disable row level security;
-alter table public.news disable row level security;
-alter table public.gallery disable row level security;
-alter table public.application_settings disable row level security;
-alter table public.ppdb disable row level security;
+-- SUPABASE STORAGE BUCKETS
+INSERT INTO storage.buckets (id, name, public)
+VALUES 
+  ('logos', 'logos', true),
+  ('teachers', 'teachers', true),
+  ('students', 'students', true),
+  ('documents', 'documents', true),
+  ('assignments', 'assignments', true),
+  ('ppdb', 'ppdb', true),
+  ('gallery', 'gallery', true),
+  ('news', 'news', true),
+  ('avatars', 'avatars', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
 
--- JIKA TABEL SUDAH DIBUAT SEBELUMNYA DAN ANDA MENGALAMI ERROR:
--- Jalankan perintah di bawah ini untuk menambahkan kolom yang kurang dan menonaktifkan Row Level Security secara paksa tanpa menghapus data yang ada!
-alter table public.profil_sekolah add column if not exists logo_url text;
-alter table public.profil_sekolah add column if not exists tahun_pelajaran text;
-alter table public.profil_sekolah add column if not exists jalan text;
-alter table public.profil_sekolah add column if not exists rt_rw text;
-alter table public.profil_sekolah add column if not exists dusun text;
-alter table public.profil_sekolah add column if not exists desa text;
-alter table public.profil_sekolah add column if not exists kecamatan text;
-alter table public.profil_sekolah add column if not exists kabupaten text;
-alter table public.profil_sekolah add column if not exists provinsi text;
-alter table public.profil_sekolah add column if not exists kode_pos text;
-alter table public.guru add column if not exists foto_url text;
-alter table public.guru add column if not exists gelar text;
-alter table public.guru add column if not exists status_kepegawaian text;
-alter table public.guru add column if not exists mata_pelajaran_utama text;
-alter table public.guru add column if not exists is_wali_kelas boolean default false;
-alter table public.siswa add column if not exists nis text;
-alter table public.siswa add column if not exists foto_url text;
-alter table public.orang_tua add column if not exists hubungan text;
+-- GRANT PERMISSIONS
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 
--- Nonaktifkan Row Level Security (RLS) & Berikan Izin Akses Penuh
-grant usage on schema public to anon, authenticated, service_role;
-grant all privileges on all tables in schema public to anon, authenticated, service_role;
-grant all privileges on all sequences in schema public to anon, authenticated, service_role;
-alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
-
-alter table public.profil_sekolah disable row level security;
-alter table public.guru disable row level security;
-alter table public.siswa disable row level security;
-alter table public.orang_tua disable row level security;
-alter table public.mata_pelajaran disable row level security;
-alter table public.jadwal_pelajaran disable row level security;
-alter table public.absensi disable row level security;
-alter table public.daftar_tugas disable row level security;
-alter table public.tugas_siswa disable row level security;
-alter table public.asesmen disable row level security;
-alter table public.temuan_khusus disable row level security;
-alter table public.notifikasi disable row level security;
-alter table public.news disable row level security;
-alter table public.gallery disable row level security;
-alter table public.application_settings disable row level security;
-alter table public.ppdb disable row level security;
-
--- Buat Kebijakan Akses Publik (RLS Open Policy) sebagai jaminan jika RLS diaktifkan kembali
-do $$
-declare
+DO $$
+DECLARE
   t text;
-begin
-  for t in select unnest(array['profil_sekolah','guru','siswa','orang_tua','mata_pelajaran','jadwal_pelajaran','absensi','daftar_tugas','tugas_siswa','asesmen','temuan_khusus','notifikasi','news','gallery','application_settings','ppdb'])
-  loop
-    execute format('drop policy if exists "Allow public access" on public.%I', t);
-    execute format('create policy "Allow public access" on public.%I for all using (true) with check (true)', t);
-  end loop;
-end $$;
+BEGIN
+  FOR t IN SELECT unnest(ARRAY[
+    'profil_sekolah','profiles','guru','data_kelas','siswa','orang_tua',
+    'mata_pelajaran','jadwal_pelajaran','absensi','daftar_tugas','tugas_siswa',
+    'asesmen','temuan_khusus','notifikasi','news','gallery','application_settings','ppdb'
+  ])
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS "Public access" ON public.%I', t);
+    EXECUTE format('CREATE POLICY "Public access" ON public.%I FOR ALL USING (true) WITH CHECK (true)', t);
+  END LOOP;
+END $$;
 
--- Bersihkan cache schema Supabase (PostgREST) secara paksa agar langsung mendeteksi kolom baru
-notify pgrst, 'reload schema';
+NOTIFY pgrst, 'reload schema';
 `;
 
 const VALID_COLUMNS: { [key: string]: string[] } = {
@@ -1180,78 +1179,16 @@ export async function pullAllFromSupabase(): Promise<{ success: boolean; error?:
         const transformed = transformKeysToCamelCase(cleanedData);
 
         if (table.isArray) {
-          if (Array.isArray(transformed) && transformed.length > 0) {
+          if (Array.isArray(transformed)) {
             localStorage.setItem(table.localName, JSON.stringify(transformed));
           } else {
-            // Supabase table is empty. Preserve local data if exists and auto-push it
-            const existingLocal = localStorage.getItem(table.localName);
-            if (existingLocal && existingLocal !== '[]') {
-              console.log(`[Auto Sync] Supabase table "${table.dbName}" is empty. Pushing existing local items to Supabase...`);
-              try {
-                const localItems = JSON.parse(existingLocal);
-                if (Array.isArray(localItems) && localItems.length > 0) {
-                  for (const item of localItems) {
-                    await syncRowToSupabase(table.dbName, item, true);
-                  }
-                }
-              } catch (e) {
-                console.warn(`[Auto Sync] Error auto-pushing local data for "${table.dbName}":`, e);
-              }
-            }
+            localStorage.setItem(table.localName, '[]');
           }
         } else {
-          if (Array.isArray(transformed)) {
-            if (transformed.length > 0) {
-              const pulledObj = transformed[0];
-              const existingLocalStr = localStorage.getItem(table.localName);
-              let existingLocalObj: any = {};
-              if (existingLocalStr) {
-                try { existingLocalObj = JSON.parse(existingLocalStr); } catch (e) {}
-              }
-
-              // Merge pulled data with existing local data, prioritizing non-empty local values if pulled field is null/undefined/empty
-              const mergedObj: any = { ...existingLocalObj };
-              Object.keys(pulledObj).forEach((k) => {
-                const val = pulledObj[k];
-                if (val !== null && val !== undefined && val !== '') {
-                  mergedObj[k] = val;
-                }
-              });
-
-              localStorage.setItem(table.localName, JSON.stringify(mergedObj));
-
-              // Sync back merged object to Supabase to ensure database receives all address and academic year fields
-              await syncRowToSupabase(table.dbName, mergedObj, true);
-            } else {
-              // Supabase singleton table is empty. Preserve local data and auto-push
-              const existingLocal = localStorage.getItem(table.localName);
-              if (existingLocal && existingLocal !== '{}') {
-                try {
-                  const localObj = JSON.parse(existingLocal);
-                  if (localObj && Object.keys(localObj).length > 0) {
-                    console.log(`[Auto Sync] Supabase singleton "${table.dbName}" is empty. Pushing local data...`);
-                    await syncRowToSupabase(table.dbName, localObj, true);
-                  }
-                } catch (e) {
-                  console.warn(`[Auto Sync] Error auto-pushing local singleton for "${table.dbName}":`, e);
-                }
-              }
-            }
-          } else if (transformed && Object.keys(transformed).length > 0) {
-            const existingLocalStr = localStorage.getItem(table.localName);
-            let existingLocalObj: any = {};
-            if (existingLocalStr) {
-              try { existingLocalObj = JSON.parse(existingLocalStr); } catch (e) {}
-            }
-            const mergedObj: any = { ...existingLocalObj };
-            Object.keys(transformed).forEach((k) => {
-              const val = transformed[k];
-              if (val !== null && val !== undefined && val !== '') {
-                mergedObj[k] = val;
-              }
-            });
-            localStorage.setItem(table.localName, JSON.stringify(mergedObj));
-            await syncRowToSupabase(table.dbName, mergedObj, true);
+          if (Array.isArray(transformed) && transformed.length > 0) {
+            localStorage.setItem(table.localName, JSON.stringify(transformed[0]));
+          } else if (transformed && typeof transformed === 'object' && Object.keys(transformed).length > 0) {
+            localStorage.setItem(table.localName, JSON.stringify(transformed));
           }
         }
 

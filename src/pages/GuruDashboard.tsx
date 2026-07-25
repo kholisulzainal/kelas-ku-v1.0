@@ -1210,11 +1210,15 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
         tanggalPenilaian: new Date().toISOString().split('T')[0]
       });
     } else if (activeTab === 'mata_pelajaran') {
+      const defaultKelasMapel = (isRealWaliKelas && loggedInGuru?.kelasWali) 
+        ? loggedInGuru.kelasWali 
+        : (activeClassFilter !== 'Semua' ? activeClassFilter : (classList[0] || 'Kelas 4'));
       reset({
         kodeMapel: '',
         namaMapel: '',
         kkm: 75,
-        guruPengampuId: gurus[0]?.id || ''
+        guruPengampuId: loggedInUserId || gurus[0]?.id || '',
+        kelas: defaultKelasMapel
       });
     } else if (activeTab === 'jadwal_pelajaran') {
       reset({
@@ -1249,6 +1253,14 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
         ...item,
         password: item.password || 'siswa123',
         passwordOrtu: ortu?.password || 'ortu123'
+      });
+    } else if (activeTab === 'mata_pelajaran') {
+      const defaultKelasMapel = item.kelas || ((isRealWaliKelas && loggedInGuru?.kelasWali) 
+        ? loggedInGuru.kelasWali 
+        : (activeClassFilter !== 'Semua' ? activeClassFilter : (classList[0] || 'Kelas 4')));
+      reset({
+        ...item,
+        kelas: defaultKelasMapel
       });
     } else {
       reset(item);
@@ -1426,13 +1438,16 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
 
   // C. MATA PELAJARAN CRUD
   const onSubmitMapel = (data: any) => {
-    const classToAssign = data.kelas || (activeClassFilter !== 'Semua' ? activeClassFilter : (loggedInGuru?.kelasWali || 'Kelas 4'));
+    const defaultKelasMapel = (isRealWaliKelas && loggedInGuru?.kelasWali) 
+      ? loggedInGuru.kelasWali 
+      : (activeClassFilter !== 'Semua' ? activeClassFilter : (classList[0] || 'Kelas 4'));
+    const classToAssign = data.kelas || defaultKelasMapel;
     const item: MataPelajaran = {
       id: editingItem?.id || `mapel-${Date.now()}`,
       kodeMapel: data.kodeMapel,
       namaMapel: data.namaMapel,
       kkm: Number(data.kkm) || 75,
-      guruPengampuId: data.guruPengampuId,
+      guruPengampuId: data.guruPengampuId || loggedInUserId || gurus[0]?.id || '',
       kelas: classToAssign
     };
     db.mataPelajaran.upsert(item);
@@ -6327,6 +6342,9 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                     {classList.map(cls => (
                       <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" key={cls} value={cls}>{cls}</option>
                     ))}
+                    {isRealWaliKelas && loggedInGuru?.kelasWali && !classList.includes(loggedInGuru.kelasWali) && (
+                      <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" key={loggedInGuru.kelasWali} value={loggedInGuru.kelasWali}>{loggedInGuru.kelasWali}</option>
+                    )}
                   </select>
                 </div>
                 <div>
