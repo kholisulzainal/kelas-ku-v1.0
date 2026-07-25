@@ -521,23 +521,14 @@ export const db = {
       window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'tugas_siswa' } }));
     },
     // Simulate Automatic Grading and submit from student
-    submitTask: (tugasId: string, siswaId: string) => {
+    submitTask: (tugasId: string, siswaId: string, customScore?: number) => {
       const list = db.tugasSiswa.getAll();
       const idx = list.findIndex(ts => ts.tugasId === tugasId && ts.siswaId === siswaId);
       const student = db.siswa.getAll().find(s => s.id === siswaId);
       const parent = db.orangTua.getAll().find(p => p.siswaId === siswaId);
       const task = db.daftarTugas.getAll().find(t => t.id === tugasId);
 
-      // Generate a realistic score automatically (e.g. 75 to 100)
-      const autoScore = Math.floor(Math.random() * 26) + 75; 
-      const feedBacks = [
-        'Sangat teliti dan tulisan rapi.',
-        'Penyelesaian soal runtut dan logis.',
-        'Sangat kreatif dalam menjawab pertanyaan.',
-        'Bagus sekali, terus pertahankan nilai hebatmu!',
-        'Konsep dipahami dengan sempurna.'
-      ];
-      const feedback = feedBacks[Math.floor(Math.random() * feedBacks.length)];
+      const finalScore = customScore != null ? customScore : undefined;
 
       const submitted: TugasSiswa = {
         id: idx > -1 ? list[idx].id : `ts-${tugasId}-${siswaId}`,
@@ -545,8 +536,9 @@ export const db = {
         siswaId,
         statusPengerjaan: true,
         tanggalDikerjakan: new Date().toISOString(),
-        nilai: autoScore,
-        umpanBalik: feedback
+        nilai: finalScore,
+        score: finalScore ?? null,
+        umpanBalik: finalScore != null ? 'Sangat teliti dan tulisan rapi.' : 'Menunggu sinkronisasi nilai dari Webhook Google Form.'
       };
 
       if (idx > -1) {
@@ -557,16 +549,16 @@ export const db = {
       db.tugasSiswa.save(list);
       syncRowToSupabase('tugas_siswa', submitted);
 
-      // Save into formal Asesmen (harian) as well!
-      if (task) {
+      // Save into formal Asesmen (harian) as well if score exists!
+      if (task && finalScore != null) {
         db.asesmen.upsert({
           id: `as-auto-${tugasId}-${siswaId}`,
           siswaId,
           mapelId: task.mapelId,
           tipe: 'harian',
           namaPenilaian: `Tugas: ${task.judulTugas}`,
-          nilai: autoScore,
-          deskripsiKompetensi: `Siswa dapat menyelesaikan tugas "${task.judulTugas}" dengan baik. ${feedback}`,
+          nilai: finalScore,
+          deskripsiKompetensi: `Siswa telah menyelesaikan tugas "${task.judulTugas}".`,
           tanggalPenilaian: new Date().toISOString().split('T')[0]
         });
       }
@@ -577,7 +569,9 @@ export const db = {
           penerimaRole: 'orang_tua',
           penerimaUserId: parent.id,
           judul: `Ananda Selesai Mengerjakan Tugas`,
-          pesan: `${student.namaSiswa} telah menyelesaikan tugas "${task.judulTugas}". Nilai otomatis diperoleh: ${autoScore}.`,
+          pesan: finalScore != null 
+            ? `${student.namaSiswa} telah menyelesaikan tugas "${task.judulTugas}". Nilai diperoleh: ${finalScore}.`
+            : `${student.namaSiswa} telah menyelesaikan tugas "${task.judulTugas}". Menunggu sinkronisasi nilai dari Google Form.`,
           tugasId: task.id
         });
       }

@@ -183,6 +183,53 @@ CREATE TABLE IF NOT EXISTS public.tugas_siswa (
     CONSTRAINT unique_tugas_siswa UNIQUE (tugas_id, siswa_id)
 );
 
+-- J2. Assignments (Hybrid Tracking Tahap 1 - Model UUID)
+CREATE TABLE IF NOT EXISTS public.assignments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    class_id UUID NOT NULL,
+    subject_id UUID NOT NULL,
+    teacher_id UUID NOT NULL,
+    google_form_url TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- K2. Student Assignments (Hybrid Tracking Tahap 1)
+CREATE TABLE IF NOT EXISTS public.student_assignments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    assignment_id UUID NOT NULL REFERENCES public.assignments(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL,
+    status VARCHAR(50) DEFAULT 'BELUM_DIKERJAKAN' CHECK (status IN ('BELUM_DIKERJAKAN', 'SEDANG_MENGERJAKAN', 'SELESAI')),
+    score NUMERIC(5, 2) DEFAULT NULL,
+    started_at TIMESTAMP WITH TIME ZONE,
+    submitted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT unique_assignment_student UNIQUE (assignment_id, student_id)
+);
+
+-- Trigger Auto-Timestamp
+CREATE OR REPLACE FUNCTION public.fn_auto_timestamp_student_assignments()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'SEDANG_MENGERJAKAN' AND NEW.started_at IS NULL THEN
+        NEW.started_at := NOW();
+    END IF;
+
+    IF NEW.status = 'SELESAI' AND NEW.submitted_at IS NULL THEN
+        NEW.submitted_at := NOW();
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_auto_timestamp_student_assignments ON public.student_assignments;
+
+CREATE TRIGGER trg_auto_timestamp_student_assignments
+BEFORE INSERT OR UPDATE ON public.student_assignments
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_auto_timestamp_student_assignments();
+
 -- L. Asesmen / Rekap Nilai Kurikulum Merdeka (Tangkapan Google Form & Manual)
 CREATE TABLE IF NOT EXISTS public.asesmen (
     id TEXT PRIMARY KEY DEFAULT ('as-' || extract(epoch from now())::bigint),

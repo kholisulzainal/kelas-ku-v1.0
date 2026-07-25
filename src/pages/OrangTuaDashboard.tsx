@@ -220,7 +220,9 @@ export function OrangTuaDashboard({ activeTab, parentId }: OrangTuaDashboardProp
                         <>
                           <p className="flex justify-between border-t border-m3-border dark:border-slate-800 pt-1.5">
                             <span className="text-m3-sec-text">Nilai Diperoleh:</span>
-                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">{submission.nilai} Poin</span>
+                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                              {submission.score != null ? `${submission.score} Poin` : (submission.nilai != null ? `${submission.nilai} Poin` : 'null')}
+                            </span>
                           </p>
                           <p className="text-[11px] text-m3-sec-text italic mt-1 bg-white dark:bg-slate-900 p-2 rounded-lg border border-m3-border">
                             Feedback Guru: "{submission.umpanBalik || 'Ananda belajar dengan sangat baik!'}"

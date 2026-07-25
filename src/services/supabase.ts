@@ -279,6 +279,53 @@ CREATE TABLE IF NOT EXISTS public.tugas_siswa (
   CONSTRAINT unique_tugas_siswa UNIQUE (tugas_id, siswa_id)
 );
 
+-- 11b. Assignments (Hybrid Tracking Tahap 1)
+CREATE TABLE IF NOT EXISTS public.assignments (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title varchar(255) NOT NULL,
+    description text,
+    class_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    teacher_id uuid NOT NULL,
+    google_form_url text NOT NULL,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+-- 11c. Student Assignments (Hybrid Tracking Tahap 1)
+CREATE TABLE IF NOT EXISTS public.student_assignments (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    assignment_id uuid NOT NULL REFERENCES public.assignments(id) ON DELETE CASCADE,
+    student_id uuid NOT NULL,
+    status varchar(50) DEFAULT 'BELUM_DIKERJAKAN' CHECK (status IN ('BELUM_DIKERJAKAN', 'SEDANG_MENGERJAKAN', 'SELESAI')),
+    score numeric(5, 2) DEFAULT NULL,
+    started_at timestamp with time zone,
+    submitted_at timestamp with time zone,
+    CONSTRAINT unique_assignment_student UNIQUE (assignment_id, student_id)
+);
+
+-- Trigger Auto-Timestamp
+CREATE OR REPLACE FUNCTION public.fn_auto_timestamp_student_assignments()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'SEDANG_MENGERJAKAN' AND NEW.started_at IS NULL THEN
+        NEW.started_at := NOW();
+    END IF;
+
+    IF NEW.status = 'SELESAI' AND NEW.submitted_at IS NULL THEN
+        NEW.submitted_at := NOW();
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_auto_timestamp_student_assignments ON public.student_assignments;
+
+CREATE TRIGGER trg_auto_timestamp_student_assignments
+BEFORE INSERT OR UPDATE ON public.student_assignments
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_auto_timestamp_student_assignments();
+
 -- 12. Asesmen / Rekap Nilai
 CREATE TABLE IF NOT EXISTS public.asesmen (
   id text PRIMARY KEY DEFAULT ('as-' || extract(epoch from now())::bigint),
@@ -400,6 +447,7 @@ BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'profil_sekolah','profiles','guru','data_kelas','siswa','orang_tua',
     'mata_pelajaran','jadwal_pelajaran','absensi','daftar_tugas','tugas_siswa',
+    'assignments','student_assignments',
     'asesmen','temuan_khusus','notifikasi','news','gallery','application_settings','ppdb'
   ])
   LOOP
@@ -417,13 +465,16 @@ const VALID_COLUMNS: { [key: string]: string[] } = {
     'tahun_pelajaran', 'jalan', 'rt_rw', 'dusun', 'desa', 'kecamatan', 'kabupaten', 'provinsi', 'kode_pos'
   ],
   guru: ['id', 'nip', 'nama_guru', 'gelar', 'mata_pelajaran_utama', 'foto_url', 'status_kepegawaian', 'password', 'is_wali_kelas', 'kelas_wali', 'google_email'],
-  siswa: ['id', 'nisn', 'nis', 'nama_siswa', 'jenis_kelamin', 'kelas', 'alamat', 'foto_url', 'nama_ayah', 'nama_ibu', 'no_telepon_ortu', 'password'],
-  orang_tua: ['id', 'nama_ortu', 'siswa_id', 'hubungan', 'no_telepon', 'password'],
+  siswa: ['id', 'nisn', 'nis', 'nama_siswa', 'jenis_kelamin', 'kelas', 'alamat', 'foto_url', 'nama_ayah', 'nama_ibu', 'no_telepon_ortu', 'password', 'email'],
+  orang_tua: ['id', 'nama_ortu', 'siswa_id', 'hubungan', 'no_telepon', 'password', 'email'],
+  profiles: ['id', 'full_name', 'email', 'username', 'role'],
   mata_pelajaran: ['id', 'kode_mapel', 'nama_mapel', 'kkm', 'guru_pengampu_id', 'kelas'],
   jadwal_pelajaran: ['id', 'mapel_id', 'hari', 'jam_mulai', 'jam_selesai', 'ruangan', 'kelas'],
   absensi: ['id', 'siswa_id', 'tanggal', 'status', 'keterangan', 'dicatat_oleh_id'],
   daftar_tugas: ['id', 'mapel_id', 'judul_tugas', 'deskripsi', 'google_form_url', 'tanggal_diberikan', 'tenggat_waktu', 'dibuat_oleh_id', 'kelas'],
-  tugas_siswa: ['id', 'tugas_id', 'siswa_id', 'status_pengerjaan', 'tanggal_dikerjakan', 'nilai', 'umpan_balik'],
+  tugas_siswa: ['id', 'tugas_id', 'siswa_id', 'status_pengerjaan', 'status', 'started_at', 'submitted_at', 'score', 'tanggal_dikerjakan', 'nilai', 'umpan_balik'],
+  assignments: ['id', 'title', 'description', 'class_id', 'subject_id', 'teacher_id', 'google_form_url', 'created_at'],
+  student_assignments: ['id', 'assignment_id', 'student_id', 'status', 'score', 'started_at', 'submitted_at'],
   asesmen: ['id', 'siswa_id', 'mapel_id', 'tipe', 'nama_penilaian', 'nilai', 'deskripsi_kompetensi', 'tanggal_penilaian', 'dinilai_oleh_id', 'kelas'],
   temuan_khusus: ['id', 'siswa_id', 'tanggal', 'kategori', 'deskripsi', 'tindakan_lanjut', 'dilaporkan_oleh_id', 'kelas'],
   notifikasi: ['id', 'penerima_role', 'penerima_user_id', 'judul', 'pesan', 'tanggal', 'dibaca', 'tugas_id'],
@@ -488,7 +539,7 @@ export function getCanonicalSiswaId(siswaId: string): string {
 }
 
 interface DbCache {
-  siswas: { id: string; nisn: string; nama_siswa: string }[];
+  siswas: { id: string; nisn: string; nama_siswa: string; email?: string }[];
   gurus: { id: string; nip: string; nama_guru: string }[];
   mapels: { id: string; kode_mapel: string; nama_mapel: string }[];
   tugases: { id: string; judul_tugas: string }[];
@@ -508,7 +559,7 @@ async function refreshDbCache(force = false): Promise<DbCache | null> {
 
   try {
     const [siswasRes, gurusRes, mapelsRes, tugasesRes] = await Promise.all([
-      client.from('siswa').select('id, nisn, nama_siswa'),
+      client.from('siswa').select('id, nisn, nama_siswa, email'),
       client.from('guru').select('id, nip, nama_guru'),
       client.from('mata_pelajaran').select('id, kode_mapel, nama_mapel'),
       client.from('daftar_tugas').select('id, judul_tugas')
@@ -649,8 +700,18 @@ async function ensureSiswaExists(siswaId: string, localSiswas: any[]): Promise<s
   const localSiswa = localSiswas.find(s => s.id === siswaId);
   const localNisn = localSiswa?.nisn?.trim();
   const localName = localSiswa?.namaSiswa?.trim();
+  const localEmail = localSiswa?.email?.trim().toLowerCase();
 
-  // 3. Try matching by NISN
+  // 3. Try matching by Email
+  if (localEmail) {
+    const matchByEmail = cache.siswas.find(s => s.email && s.email.trim().toLowerCase() === localEmail);
+    if (matchByEmail) {
+      console.log(`Matched local siswa_id ${siswaId} to DB siswa_id ${matchByEmail.id} by Email ${localEmail}`);
+      return matchByEmail.id;
+    }
+  }
+
+  // 4. Try matching by NISN
   if (localNisn) {
     const matchByNisn = cache.siswas.find(s => s.nisn && s.nisn.trim() === localNisn);
     if (matchByNisn) {
@@ -659,7 +720,7 @@ async function ensureSiswaExists(siswaId: string, localSiswas: any[]): Promise<s
     }
   }
 
-  // 4. Try matching by Name
+  // 5. Try matching by Name
   if (localName) {
     const matchByName = cache.siswas.find(s => s.nama_siswa && s.nama_siswa.trim().toLowerCase() === localName.toLowerCase());
     if (matchByName) {
@@ -668,7 +729,7 @@ async function ensureSiswaExists(siswaId: string, localSiswas: any[]): Promise<s
     }
   }
 
-  // 5. If not found, dynamically insert a placeholder student record in the DB
+  // 6. If not found, dynamically insert a placeholder student record in the DB
   const client = getSupabaseClient();
   if (client) {
     const placeholderNisn = localNisn || `TEMP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -685,7 +746,8 @@ async function ensureSiswaExists(siswaId: string, localSiswas: any[]): Promise<s
       nama_ayah: localSiswa?.namaAyah || '',
       nama_ibu: localSiswa?.namaIbu || '',
       no_telepon_ortu: localSiswa?.noTeleponOrtu || '',
-      password: localSiswa?.password || 'siswa123'
+      password: localSiswa?.password || 'siswa123',
+      email: localEmail || `${siswaId}@sd.id`
     }, client);
 
     if (!error) {

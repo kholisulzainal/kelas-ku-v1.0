@@ -10,12 +10,14 @@ import {
   TrendingUp,
   Activity,
   Calendar,
-  Camera
+  Camera,
+  Mail
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { db } from '../services/db';
 import { exportToCSV } from '../utils/export';
 import { Absensi, Asesmen, DaftarTugas, TugasSiswa } from '../types';
+import { StudentAssignmentCard } from '../components/StudentAssignmentCard';
 
 interface SiswaDashboardProps {
   activeTab: string;
@@ -34,14 +36,19 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
   const [syncStep, setSyncStep] = useState<number>(0);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [photoUrlInput, setPhotoUrlInput] = useState(currentSiswa?.fotoUrl || '');
+  const [emailInput, setEmailInput] = useState(currentSiswa?.email || `${siswaId}@sd.id`);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
   const [avatarTab, setAvatarTab] = useState<'boys' | 'girls'>('boys');
   const siswaKelas = currentSiswa?.kelas || 'Kelas 4';
   const subjects = db.mataPelajaran.getAll().filter(m => !m.kelas || m.kelas === siswaKelas);
 
-  const handleSavePhoto = () => {
+  const handleSaveProfile = () => {
     if (currentSiswa) {
-      const updated = { ...currentSiswa, fotoUrl: photoUrlInput };
+      const cleanEmail = emailInput.trim().toLowerCase();
+      const updated = { ...currentSiswa, fotoUrl: photoUrlInput, email: cleanEmail };
       db.siswa.upsert(updated);
+      setSaveSuccessMsg('Profil & Email berhasil disimpan! Nilai Google Form akan tersinkron otomatis.');
+      setTimeout(() => setSaveSuccessMsg(''), 4000);
       setShowPhotoModal(false);
     }
   };
@@ -180,10 +187,11 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
             type="button" 
             onClick={() => {
               setPhotoUrlInput(currentSiswa?.fotoUrl || '');
+              setEmailInput(currentSiswa?.email || `${siswaId}@sd.id`);
               setShowPhotoModal(true);
             }} 
             className="group relative cursor-pointer outline-none shrink-0"
-            title="Klik untuk mengubah foto profil"
+            title="Klik untuk mengubah profil & email"
           >
             <div className="relative rounded-full overflow-hidden border-2 border-white/20 shadow-md">
               {currentSiswa?.fotoUrl ? (
@@ -209,9 +217,22 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
 
           <div>
             <h2 className="text-xl font-extrabold">Halo, {currentSiswa?.namaSiswa}! 👋</h2>
-            <p className="text-xs text-m3-purple-light mt-1 max-w-xl">
-              Selamat datang di portal belajarmu. Pantau tugas Google Form, cek laporan nilai Kurikulum Merdeka, dan pertahankan prestasimu!
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/15 text-amber-200 border border-white/20">
+                <Mail className="w-3 h-3 text-amber-300" /> Email: {currentSiswa?.email || `${siswaId}@sd.id`}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPhotoUrlInput(currentSiswa?.fotoUrl || '');
+                  setEmailInput(currentSiswa?.email || `${siswaId}@sd.id`);
+                  setShowPhotoModal(true);
+                }}
+                className="text-[10px] font-extrabold text-emerald-300 hover:text-emerald-200 underline cursor-pointer"
+              >
+                Atur Email Google
+              </button>
+            </div>
           </div>
         </div>
         
@@ -222,14 +243,22 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
             type="button" 
             onClick={() => {
               setPhotoUrlInput(currentSiswa?.fotoUrl || '');
+              setEmailInput(currentSiswa?.email || `${siswaId}@sd.id`);
               setShowPhotoModal(true);
             }}
             className="mt-2 text-[10px] text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer inline-flex items-center gap-1"
           >
-            <Camera className="w-3 h-3" /> Ubah Foto Profil
+            <Mail className="w-3 h-3" /> Edit Email & Profil
           </button>
         </div>
       </div>
+
+      {saveSuccessMsg && (
+        <div className="p-3 bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 rounded-2xl text-xs font-extrabold text-emerald-800 dark:text-emerald-200 flex items-center gap-2 animate-fade-in shadow-xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{saveSuccessMsg}</span>
+        </div>
+      )}
 
       {/* 1. TUGAS HARIAN SAYA */}
       {activeTab === 'siswa_tugas' && (
@@ -240,98 +269,24 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
                 <Bookmark className="w-5 h-5 text-m3-purple" />
                 Tugas Google Form Aktif
               </h3>
-              <p className="text-xs text-m3-sec-text">Selesaikan tugas di Google Form lalu klik Konfirmasi Selesai untuk penilaian otomatis</p>
+              <p className="text-xs text-m3-sec-text">Kerjakan tugas di Google Form. Nilai akan otomatis tersinkronisasi langsung melalui Webhook Google Form.</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {tasks.filter(t => !t.kelas || t.kelas === siswaKelas).map((t) => {
               const mapel = subjects.find(m => m.id === t.mapelId);
-              const submission = mySubmissions.find(sub => sub.tugasId === t.id);
-              const isCompleted = submission?.statusPengerjaan;
 
               return (
-                <div
+                <StudentAssignmentCard
                   key={t.id}
-                  className={`p-6 rounded-3xl border shadow-sm flex flex-col justify-between transition-colors ${
-                    isCompleted
-                      ? 'bg-emerald-50/40 dark:bg-emerald-950/10 border-emerald-200 dark:border-emerald-900/30'
-                      : 'bg-white dark:bg-slate-900 border-m3-border dark:border-slate-800/80'
-                  }`}
-                >
-                  <div>
-                    <div className="flex justify-between items-start">
-                      <span className={`text-xs font-bold px-3 py-1 rounded-full ${
-                        isCompleted
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
-                          : 'bg-m3-purple-light text-m3-purple-dark'
-                      }`}>
-                        {mapel ? mapel.namaMapel : 'Mapel'}
-                      </span>
-                      {isCompleted ? (
-                        <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-bold bg-emerald-100/50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Selesai
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs font-bold bg-amber-50 dark:bg-amber-950/20 px-2.5 py-0.5 rounded-full">
-                          <AlertCircle className="w-3.5 h-3.5" /> Belum Selesai
-                        </span>
-                      )}
-                    </div>
-
-                    <h4 className="text-base font-bold text-m3-text dark:text-white mt-3">{t.judulTugas}</h4>
-                    <p className="text-xs text-m3-sec-text mt-1">{t.deskripsi}</p>
-
-                    <div className="mt-4 bg-m3-lavender/30 dark:bg-slate-800/40 p-3.5 rounded-2xl border border-m3-border dark:border-slate-800 space-y-1.5 text-xs">
-                      <p className="flex justify-between">
-                        <span className="text-m3-sec-text">Tenggat Waktu:</span>
-                        <strong className="text-m3-text dark:text-slate-300">
-                          {new Date(t.tenggatWaktu).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'long',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </strong>
-                      </p>
-                      {isCompleted && (
-                        <>
-                          <p className="flex justify-between border-t border-m3-border dark:border-slate-800 pt-1.5">
-                            <span className="text-m3-sec-text">Nilai Otomatis:</span>
-                            <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-sm">{submission.nilai} Poin</strong>
-                          </p>
-                          <p className="text-[11px] text-m3-sec-text italic mt-1 bg-white dark:bg-slate-900 p-2 rounded-lg border border-m3-border dark:border-slate-800">
-                            " {submission.umpanBalik || 'Sangat baik, pertahankan!' } "
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-6 pt-4 border-t border-m3-border dark:border-slate-800 grid grid-cols-2 gap-3">
-                    <a
-                      href={t.googleFormUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      id={`open_gform_${t.id}`}
-                      className="bg-m3-purple text-white text-xs font-bold py-2.5 rounded-full text-center shadow-sm cursor-pointer hover:bg-m3-purple-dark transition-all flex items-center justify-center gap-1 hover:scale-105"
-                    >
-                      Kerjakan Tugas <ExternalLink className="w-3 h-3" />
-                    </a>
-                    <button
-                      id={`confirm_task_${t.id}`}
-                      disabled={!!isCompleted}
-                      onClick={() => handleConfirmTaskDone(t.id)}
-                      className={`text-xs font-bold py-2.5 rounded-full text-center shadow-sm transition-all ${
-                        isCompleted
-                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-700/50'
-                          : 'bg-emerald-600 text-white cursor-pointer hover:bg-emerald-700 hover:scale-105'
-                      }`}
-                    >
-                      {isCompleted ? 'Selesai ✓' : 'Lanjutkan Tugas'}
-                    </button>
-                  </div>
-                </div>
+                  task={t}
+                  studentId={siswaId}
+                  mapelName={mapel?.namaMapel}
+                  onStatusUpdated={() => {
+                    setMySubmissions(db.tugasSiswa.getAll().filter(ts => ts.siswaId === siswaId));
+                  }}
+                />
               );
             })}
           </div>
@@ -638,37 +593,65 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
         </div>
       )}
 
-      {/* STUDENT PHOTO EDITING MODAL */}
+      {/* STUDENT PROFILE & EMAIL EDITING MODAL */}
       {showPhotoModal && (
-        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-md flex items-center justify-center z-55 p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 transform transition-transform duration-300 scale-100">
+        <div 
+          className="fixed inset-0 bg-slate-900/75 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fade-in pointer-events-auto"
+          onClick={() => setShowPhotoModal(false)}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="relative z-[101] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 transform transition-transform duration-300 scale-100 pointer-events-auto"
+          >
             <div className="text-center space-y-1">
-              <h4 className="text-base font-bold text-slate-800 dark:text-white flex items-center justify-center gap-1.5">
-                <span>📸</span> Ubah Foto Profil Saya
+              <h4 className="text-base font-extrabold text-slate-800 dark:text-white flex items-center justify-center gap-1.5">
+                <Mail className="w-5 h-5 text-m3-purple" /> Pengaturan Email & Profil Siswa
               </h4>
-              <p className="text-[11px] text-slate-500">Ambil foto baru atau upload gambar langsung dari HP-mu!</p>
+              <p className="text-[11px] text-slate-500">
+                Atur email Google kamu agar nilai kuis Google Form otomatis tersinkron ke akun ini.
+              </p>
+            </div>
+
+            {/* EMAIL INPUT FIELD */}
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-2xl space-y-2">
+              <label className="block text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1">
+                <Mail className="w-3.5 h-3.5 text-amber-600" /> Email Google / Google Form Siswa:
+              </label>
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="contoh: kholisulzainal@gmail.com atau siswa1@sd.id"
+                className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              <p className="text-[10px] text-amber-700 dark:text-amber-400 italic leading-snug">
+                *Pastikan email ini persis sama dengan email yang kamu masukkan saat mengerjakan Google Form.
+              </p>
             </div>
 
             {/* PREVIEW & DEVICE UPLOAD */}
-            <div className="flex flex-col items-center gap-4 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-800/40 dark:to-slate-800/70 p-5 rounded-2xl border border-slate-200/50 dark:border-slate-800">
+            <div className="flex flex-col items-center gap-3 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-800/40 dark:to-slate-800/70 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 self-start">
+                Foto Profil:
+              </span>
               {photoUrlInput ? (
                 <img 
                   src={photoUrlInput} 
                   alt="Preview" 
-                  className="w-24 h-24 rounded-full object-cover shrink-0 aspect-square border-4 border-m3-purple shadow-md"
+                  className="w-20 h-20 rounded-full object-cover shrink-0 aspect-square border-4 border-m3-purple shadow-md"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="w-24 h-24 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold text-2xl border-4 border-slate-300 dark:border-slate-600">
+                <div className="w-20 h-20 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold text-xl border-4 border-slate-300 dark:border-slate-600">
                   SD
                 </div>
               )}
               
               {/* UPLOAD FROM PHONE */}
               <div className="w-full">
-                <label className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-sm w-full text-center">
+                <label className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-xs w-full text-center">
                   <Camera className="w-4 h-4" />
-                  <span>Pilih / Ambil Foto Sekarang</span>
+                  <span>Pilih / Ambil Foto Baru</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -683,16 +666,17 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
               <button
                 type="button"
                 onClick={() => setShowPhotoModal(false)}
-                className="flex-1 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
-                onClick={handleSavePhoto}
-                className="flex-1 py-1.5 rounded-xl bg-m3-purple hover:bg-m3-purple-dark text-white text-xs font-bold shadow-md transition-colors"
+                onClick={handleSaveProfile}
+                className="flex-1 py-2 rounded-xl bg-m3-purple hover:bg-m3-purple-dark text-white text-xs font-bold shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
               >
-                Simpan Foto
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Simpan Profil & Email</span>
               </button>
             </div>
           </div>

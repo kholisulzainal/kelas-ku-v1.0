@@ -40,8 +40,10 @@ import {
   Calendar,
   HelpCircle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Code
 } from 'lucide-react';
+import { GoogleAppsScriptModal } from '../components/GoogleAppsScriptModal';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { db } from '../services/db';
 import { syncRowToSupabase } from '../services/supabase';
@@ -292,6 +294,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
   const [ingestScores, setIngestScores] = useState<{ [siswaId: string]: { nilai: string | number; deskripsi: string } }>({});
   const [ingestNotice, setIngestNotice] = useState('');
   const [showGFormGuide, setShowGFormGuide] = useState(false);
+  const [showAppsScriptModal, setShowAppsScriptModal] = useState(false);
 
   const handleOpenIngestModal = (task: DaftarTugas) => {
     setIngestTaskModal(task);
@@ -305,8 +308,10 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
         a.mapelId === task.mapelId && 
         a.namaPenilaian.includes(task.judulTugas)
       );
+      const ts = tugasSiswa.find(ts => ts.tugasId === task.id && ts.siswaId === s.id);
+      const realScore = ts?.score ?? ts?.nilai;
       initialScores[s.id] = {
-        nilai: existing ? existing.nilai : 85,
+        nilai: existing ? existing.nilai : (realScore != null ? realScore : ''),
         deskripsi: existing?.deskripsiKompetensi || `Hasil penilaian Kuis Google Form: ${task.judulTugas}`
       };
     });
@@ -5431,7 +5436,15 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
               <h3 className="text-base font-bold text-slate-800 dark:text-white">Penugasan Terintegrasi Google Form</h3>
               <p className="text-xs text-slate-500">Berikan tugas berbasis web formulir Google Form, rilis notifikasi instan</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setShowAppsScriptModal(true)}
+                className="bg-purple-100 hover:bg-purple-200 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 text-m3-purple dark:text-purple-300 text-xs font-bold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer transition-colors border border-purple-200 dark:border-purple-800/50"
+              >
+                <Code className="w-4 h-4 text-m3-purple" />
+                <span>Skrip Webhook (Tahap 2)</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setShowGFormGuide(!showGFormGuide)}
@@ -7618,6 +7631,13 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
           </div>
         </div>
       )}
+
+      {/* Modal Google Apps Script Integrasi Webhook Tahap 2 */}
+      <GoogleAppsScriptModal
+        isOpen={showAppsScriptModal}
+        onClose={() => setShowAppsScriptModal(false)}
+        tasks={tugases}
+      />
     </div>
   );
 }

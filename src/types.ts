@@ -51,6 +51,7 @@ export interface Guru {
 export interface Siswa {
   id: string;
   profileId?: string;
+  email?: string;
   nisn: string;
   nis: string;
   namaSiswa: string;
@@ -102,6 +103,29 @@ export interface Absensi {
   dicatatOlehId?: string; // Relasi ke Guru
 }
 
+export type AssignmentStatus = 'BELUM_DIKERJAKAN' | 'SEDANG_MENGERJAKAN' | 'SELESAI';
+
+export interface Assignment {
+  id: string;
+  title: string;
+  description?: string;
+  class_id?: string;
+  subject_id?: string;
+  teacher_id?: string;
+  google_form_url: string;
+  created_at?: string;
+}
+
+export interface StudentAssignment {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  status: AssignmentStatus;
+  score?: number | null;
+  started_at?: string | null;
+  submitted_at?: string | null;
+}
+
 export interface DaftarTugas {
   id: string;
   mapelId: string;
@@ -119,8 +143,12 @@ export interface TugasSiswa {
   tugasId: string;
   siswaId: string;
   statusPengerjaan: boolean;
+  status?: AssignmentStatus;
+  startedAt?: string | null;
+  submittedAt?: string | null;
   tanggalDikerjakan?: string;
   nilai?: number;
+  score?: number | null;
   umpanBalik?: string;
 }
 
