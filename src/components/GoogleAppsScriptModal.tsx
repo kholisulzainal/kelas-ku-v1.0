@@ -128,7 +128,7 @@ CREATE POLICY "Allow public read-write for student_assignments" ON public.studen
 
   const scriptCode = `/**
  * GOOGLE APPS SCRIPT - HYBRID TRACKING TAHAP 2 (KELAS KU)
- * Pasang skrip ini di Google Sheets Respon Google Form (Extensions -> Apps Script)
+ * Pasang skrip ini di Google Sheets Respon Google Form atau Google Form langsung (Extensions -> Apps Script)
  */
 
 var WEBHOOK_URL = "${webhookUrl}";
@@ -137,44 +137,140 @@ var ASSIGNMENT_ID = "${activeTaskId || 'ID_TUGAS_AKAN_DIPILIH'}";
 
 function onFormSubmit(e) {
   try {
-    if (!e) {
-      Logger.log("Event object 'e' null. Jalankan fungsi ini via Trigger On Form Submit.");
-      return;
+    var studentEmail = "";
+    var scoreText = "";
+
+    // =========================================================================
+    // TEKNIK 1: Event Google Form (e.response dari FormApp)
+    // =========================================================================
+    if (e && e.response) {
+      if (typeof e.response.getRespondentEmail === "function") {
+        studentEmail = e.response.getRespondentEmail() || "";
+      }
+      
+      // Jika email terverifikasi kosong, cari dari jawaban item bertema "email"
+      if (!studentEmail && typeof e.response.getItemResponses === "function") {
+        var itemResponses = e.response.getItemResponses();
+        for (var i = 0; i < itemResponses.length; i++) {
+          var itemTitle = itemResponses[i].getItem().getTitle().toLowerCase();
+          if (itemTitle.indexOf("email") !== -1 || itemTitle.indexOf("surel") !== -1) {
+            studentEmail = itemResponses[i].getResponse();
+            break;
+          }
+        }
+      }
+
+      // Ambil Skor Quiz dari FormResponse
+      if (typeof e.response.getGradableItemResponses === "function") {
+        var gradables = e.response.getGradableItemResponses();
+        var totalScore = 0;
+        for (var j = 0; j < gradables.length; j++) {
+          totalScore += gradables[j].getScore() || 0;
+        }
+        scoreText = String(totalScore);
+      }
     }
 
-    var studentEmail = e.response ? e.response.getRespondentEmail() : "";
-    
-    // Fallback: Jika email terverifikasi kosong, cari dari jawaban form
-    if (!studentEmail && e.response) {
-      var itemResponses = e.response.getItemResponses();
-      for (var i = 0; i < itemResponses.length; i++) {
-        var title = itemResponses[i].getItem().getTitle().toLowerCase();
-        if (title.indexOf("email") !== -1) {
-          studentEmail = itemResponses[i].getResponse();
-          break;
+    // =========================================================================
+    // TEKNIK 2: Event Google Sheets (e.namedValues / e.values dari SpreadsheetApp)
+    // =========================================================================
+    if (!studentEmail && e && e.namedValues) {
+      // Cari Email dari e.namedValues (Object nama kolom Google Sheets)
+      for (var key in e.namedValues) {
+        var lowerKey = key.toLowerCase();
+        if (lowerKey.indexOf("email") !== -1 || lowerKey.indexOf("surel") !== -1 || lowerKey.indexOf("alamat") !== -1) {
+          var valArr = e.namedValues[key];
+          if (valArr && valArr.length > 0 && valArr[0]) {
+            studentEmail = String(valArr[0]).trim();
+            break;
+          }
+        }
+      }
+
+      // Cari Skor dari e.namedValues
+      if (!scoreText || scoreText === "0") {
+        for (var keyScore in e.namedValues) {
+          var lowerKeyScore = keyScore.toLowerCase();
+          if (lowerKeyScore.indexOf("skor") !== -1 || lowerKeyScore.indexOf("score") !== -1 || lowerKeyScore.indexOf("nilai") !== -1) {
+            var valScoreArr = e.namedValues[keyScore];
+            if (valScoreArr && valScoreArr.length > 0 && valScoreArr[0]) {
+              scoreText = String(valScoreArr[0]).trim();
+              break;
+            }
+          }
         }
       }
     }
 
-    // Ambil skor nilai dari Quiz
-    var scoreText = "85";
-    if (e.response && typeof e.response.getGradableItemResponses === "function") {
-      var totalScore = 0;
-      var gradables = e.response.getGradableItemResponses();
-      for (var j = 0; j < gradables.length; j++) {
-        totalScore += gradables[j].getScore() || 0;
+    // Backup dari e.values (Array kolom mentah Google Sheets)
+    if (e && e.values && e.values.length > 0) {
+      if (!studentEmail) {
+        for (var v = 0; v < e.values.length; v++) {
+          var val = String(e.values[v]).trim();
+          if (val.indexOf("@") !== -1 && val.indexOf(".") !== -1) {
+            studentEmail = val;
+            break;
+          }
+        }
       }
-      scoreText = String(totalScore);
-    } else if (e.values && e.values.length > 1) {
-      scoreText = e.values[1] || e.values[2] || "85";
+
+      if (!scoreText || scoreText === "0") {
+        for (var s = 0; s < e.values.length; s++) {
+          var valS = String(e.values[s]).trim();
+          if (valS.indexOf("/") !== -1 || (valS.length <= 5 && !isNaN(parseFloat(valS)))) {
+            scoreText = valS;
+            break;
+          }
+        }
+      }
     }
 
-    Logger.log("Mengirim webhook email: " + studentEmail + " | score: " + scoreText);
+    // =========================================================================
+    // TEKNIK 3: Fallback Membaca Baris Terakhir Google Sheets
+    // =========================================================================
+    if (!studentEmail || !scoreText) {
+      try {
+        var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+        var lastRow = sheet.getLastRow();
+        if (lastRow > 1) {
+          var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+          var rowData = sheet.getRange(lastRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+          for (var col = 0; col < headers.length; col++) {
+            var h = String(headers[col]).toLowerCase();
+            var d = String(rowData[col]).trim();
+
+            if (!studentEmail && (h.indexOf("email") !== -1 || d.indexOf("@") !== -1)) {
+              studentEmail = d;
+            }
+            if (!scoreText && (h.indexOf("skor") !== -1 || h.indexOf("score") !== -1 || h.indexOf("nilai") !== -1)) {
+              scoreText = d;
+            }
+          }
+        }
+      } catch (sheetErr) {
+        Logger.log("Info fallback sheet: " + sheetErr.toString());
+      }
+    }
+
+    // Normalisasi email & skor default
+    studentEmail = String(studentEmail || "").trim().toLowerCase();
+    scoreText = String(scoreText || "100").trim();
+
+    Logger.log("=== WEBHOOK KELAS KU ===");
+    Logger.log("Email Siswa : " + studentEmail);
+    Logger.log("ID Tugas    : " + ASSIGNMENT_ID);
+    Logger.log("Skor/Nilai  : " + scoreText);
+
+    if (!studentEmail) {
+      Logger.log("PERINGATAN: Email siswa tidak ditemukan dari e / sheet!");
+      return;
+    }
 
     var payload = {
       "student_email": studentEmail,
       "assignment_id": ASSIGNMENT_ID,
-      "score_text": String(scoreText)
+      "score_text": scoreText
     };
 
     var options = {
@@ -188,13 +284,46 @@ function onFormSubmit(e) {
     };
 
     var response = UrlFetchApp.fetch(WEBHOOK_URL, options);
-    Logger.log("Response Code: " + response.getResponseCode());
-    Logger.log("Response Body: " + response.getContentText());
+    Logger.log("Status Response : " + response.getResponseCode());
+    Logger.log("Body Response   : " + response.getContentText());
 
   } catch (err) {
-    Logger.log("Error onFormSubmit: " + err.toString());
+    Logger.log("ERROR onFormSubmit: " + err.toString());
   }
-}`;
+}
+
+/**
+ * FUNGSI UJI COBA (JALANKAN DARI MANAJER SKRIP)
+ * Pilih fungsi 'testKirimWebhook' lalu klik tombol 'Run / Jalankan' di Apps Script Editor
+ */
+function testKirimWebhook() {
+  var testEmail = "kholisulzainal@gmail.com"; // Sesuaikan email siswa Anda
+  var testScore = "100 / 100";
+  
+  Logger.log("Menguji pengiriman webhook untuk: " + testEmail);
+  
+  var payload = {
+    "student_email": testEmail,
+    "assignment_id": ASSIGNMENT_ID,
+    "score_text": testScore
+  };
+
+  var options = {
+    "method": "post",
+    "contentType": "application/json",
+    "headers": {
+      "x-webhook-secret": WEBHOOK_SECRET
+    },
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+
+  var res = UrlFetchApp.fetch(WEBHOOK_URL, options);
+  Logger.log("=== HASIL TEST WEBHOOK ===");
+  Logger.log("HTTP Code : " + res.getResponseCode());
+  Logger.log("HTTP Body : " + res.getContentText());
+}
+`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(scriptCode);
@@ -417,16 +546,28 @@ function onFormSubmit(e) {
                 </div>
 
                 {/* Step-by-Step Instructions */}
-                <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 rounded-2xl text-xs space-y-2">
-                  <span className="font-extrabold text-amber-900 dark:text-amber-300 flex items-center gap-1">
-                    <HelpCircle className="w-4 h-4 text-amber-600" /> Langkah Memasang di Google Sheets:
+                <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border-2 border-amber-400 dark:border-amber-800 rounded-2xl text-xs space-y-2.5">
+                  <span className="font-black text-amber-900 dark:text-amber-200 flex items-center gap-1.5 text-sm">
+                    <HelpCircle className="w-5 h-5 text-amber-600" /> LANGKAH PENTING (PENYEBAB UTAMA WEBHOOK BELUM TERKIRIM):
                   </span>
-                  <ol className="list-decimal list-inside space-y-1 text-amber-800 dark:text-amber-400 pl-1">
-                    <li>Buka **Google Sheets** yang terhubung ke Google Form tugas.</li>
-                    <li>Klik menu **Ekstensi (Extensions)** -&gt; **Apps Script**.</li>
-                    <li>Hapus semua kode lama, lalu **tempelkan kode skrip di atas**.</li>
-                    <li>Klik menu **Pemicu (Triggers / ikon jam)** -&gt; Klik **"+ Tambah Pemicu"**.</li>
-                    <li>Pilih jenis acara: **"Saat mendaftar formulir" (On form submit)** lalu klik **Simpan**.</li>
+                  <ol className="list-decimal list-inside space-y-2 text-amber-900 dark:text-amber-300 pl-1 leading-relaxed">
+                    <li>
+                      <strong>Tempel Kode:</strong> Buka Google Sheets -&gt; <strong>Ekstensi (Extensions)</strong> -&gt; <strong>Apps Script</strong>. Hapus kode lama &amp; tempel skrip di atas.
+                    </li>
+                    <li className="bg-amber-100 dark:bg-amber-900/40 p-2 rounded-xl border border-amber-300 dark:border-amber-700">
+                      <strong>WAJIB: PASANG PEMICU (TRIGGERS):</strong> Tanpa pemicu, Google Apps Script TIDAK AKAN PERNAH berjalan otomatis saat siswa isi form!
+                      <br />
+                      &bull; Klik ikon <strong>Jam Dinding (Pemicu / Triggers)</strong> di menu sebelah kiri Apps Script.
+                      <br />
+                      &bull; Klik tombol <strong>"+ Tambah Pemicu" (+ Add Trigger)</strong> di kanan bawah.
+                      <br />
+                      &bull; Pilih jenis acara (Event type): <strong>"Saat mendaftar formulir" (On form submit)</strong>.
+                      <br />
+                      &bull; Klik <strong>Simpan (Save)</strong> dan izinkan otorisasi Google Account.
+                    </li>
+                    <li>
+                      <strong>TES LANGSUNG SEKARANG:</strong> Kembali ke editor Apps Script, pilih fungsi <code>testKirimWebhook</code> di drop-down paling atas, lalu klik <strong>Run / Jalankan</strong>. Buka <strong>Executions / Log</strong> untuk melihat respon <code>HTTP 200 SUCCESS</code>!
+                    </li>
                   </ol>
                 </div>
               </>

@@ -80,6 +80,15 @@ export const assignmentService = {
   }> {
     const client = getSupabaseClient();
     
+    // Find student details to get candidate IDs (id, email, emailPrefix)
+    const currentSiswa = db.siswa.getAll().find(s => s.id === studentId);
+    const studentEmail = currentSiswa?.email?.trim().toLowerCase();
+    const emailPrefix = studentEmail ? studentEmail.split('@')[0] : (studentId.includes('@') ? studentId.split('@')[0] : null);
+
+    const targetIds = Array.from(
+      new Set([studentId, studentEmail, emailPrefix].filter(Boolean) as string[])
+    );
+
     // 1. Check Supabase table `student_assignments` first if client connected
     if (client) {
       try {
@@ -87,15 +96,36 @@ export const assignmentService = {
           .from('student_assignments')
           .select('*')
           .eq('assignment_id', assignmentId)
-          .eq('student_id', studentId)
-          .maybeSingle();
+          .in('student_id', targetIds)
+          .order('submitted_at', { ascending: false })
+          .limit(1);
 
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
+          const row = data[0];
           return {
-            status: (data.status as AssignmentStatus) || 'BELUM_DIKERJAKAN',
-            score: data.score != null ? Number(data.score) : null,
-            startedAt: data.started_at || null,
-            submittedAt: data.submitted_at || null
+            status: (row.status as AssignmentStatus) || 'BELUM_DIKERJAKAN',
+            score: row.score != null ? Number(row.score) : null,
+            startedAt: row.started_at || null,
+            submittedAt: row.submitted_at || null
+          };
+        }
+
+        // Also check `tugas_siswa` in Supabase
+        const { data: tsData, error: tsError } = await client
+          .from('tugas_siswa')
+          .select('*')
+          .eq('tugas_id', assignmentId)
+          .in('siswa_id', targetIds)
+          .order('submitted_at', { ascending: false })
+          .limit(1);
+
+        if (!tsError && tsData && tsData.length > 0) {
+          const tsRow = tsData[0];
+          return {
+            status: (tsRow.status as AssignmentStatus) || (tsRow.status_pengerjaan ? 'SELESAI' : 'BELUM_DIKERJAKAN'),
+            score: tsRow.score ?? tsRow.nilai ?? null,
+            startedAt: tsRow.started_at || null,
+            submittedAt: tsRow.submitted_at || null
           };
         }
       } catch (err) {
@@ -105,7 +135,7 @@ export const assignmentService = {
 
     // 2. Fallback to local DB `tugas_siswa`
     const submissions = db.tugasSiswa.getAll();
-    const sub = submissions.find(s => s.tugasId === assignmentId && s.siswaId === studentId);
+    const sub = submissions.find(s => s.tugasId === assignmentId && targetIds.includes(s.siswaId));
     
     if (sub) {
       const status: AssignmentStatus = sub.status || (sub.statusPengerjaan ? 'SELESAI' : (sub.startedAt ? 'SEDANG_MENGERJAKAN' : 'BELUM_DIKERJAKAN'));

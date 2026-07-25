@@ -24,6 +24,9 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isEnteringScore, setIsEnteringScore] = useState<boolean>(false);
+  const [manualScoreInput, setManualScoreInput] = useState<string>('100');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // 1. Fetch State Pengerjaan Siswa from student_assignments / local DB
   const fetchStatus = async () => {
@@ -41,10 +44,64 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
     }
   };
 
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchStatus();
+    setTimeout(() => setIsRefreshing(false), 600);
+  };
+
+  const handleSaveManualScore = async () => {
+    try {
+      setIsSubmitting(true);
+      const parsedNum = parseInt(manualScoreInput, 10);
+      const val = isNaN(parsedNum) ? 100 : Math.min(100, Math.max(0, parsedNum));
+      
+      const updated = await assignmentService.finishAssignment(task.id, studentId, val, 'Nilai diisi secara manual oleh siswa.');
+      setStatus('SELESAI');
+      setScore(updated.score ?? updated.nilai ?? val);
+      setSubmittedAt(updated.submittedAt || new Date().toISOString());
+      setIsEnteringScore(false);
+      if (onStatusUpdated) onStatusUpdated();
+    } catch (err) {
+      console.error('Failed to save manual score:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     if (task.id && studentId) {
       fetchStatus();
     }
+  }, [task.id, studentId]);
+
+  // Automatic polling when waiting for webhook score
+  useEffect(() => {
+    if (status === 'SELESAI' && score == null) {
+      const interval = setInterval(() => {
+        fetchStatus();
+      }, 3500);
+
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+      }, 60000); // Poll for up to 1 minute
+
+      return () => {
+        clearInterval(interval);
+        clearTimeout(timeout);
+      };
+    }
+  }, [status, score, task.id, studentId]);
+
+  // Listen for window focus & custom sync events
+  useEffect(() => {
+    const handleSync = () => fetchStatus();
+    window.addEventListener('focus', handleSync);
+    window.addEventListener('supabase-data-updated', handleSync);
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      window.removeEventListener('supabase-data-updated', handleSync);
+    };
   }, [task.id, studentId]);
 
   // Handle Click for BELUM_DIKERJAKAN
@@ -167,22 +224,33 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
 
           {/* Score & Badge for SELESAI */}
           {isCompleted && (
-            <div className="border-t border-emerald-200 dark:border-emerald-900/50 pt-2 space-y-1.5">
+            <div className="border-t border-emerald-200 dark:border-emerald-900/50 pt-2 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1 font-semibold">
                   <Award className="w-3.5 h-3.5 text-amber-500" /> Skor / Nilai Siswa:
                 </span>
-                <strong className="text-emerald-700 dark:text-emerald-400 font-extrabold font-mono text-sm">
-                  {score != null ? `${score} / 100` : 'Menunggu Webhook Nilai'}
-                </strong>
+                <div className="flex items-center gap-2">
+                  <strong className="text-emerald-700 dark:text-emerald-400 font-extrabold font-mono text-sm">
+                    {score != null ? `${score} / 100` : 'Menunggu Webhook Nilai'}
+                  </strong>
+                  <button
+                    type="button"
+                    onClick={handleManualRefresh}
+                    title="Cek & Refresh Sinkronisasi Webhook"
+                    className="p-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 cursor-pointer transition-all"
+                  >
+                    <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
+
               {score == null && (
                 <p className="text-[10px] text-amber-600 dark:text-amber-400 italic">
-                  *Tugas telah ditandai selesai. Nilai akan otomatis terupdate setelah kuis diisi & Webhook Google Form terhubung.
+                  *Tugas telah ditandai selesai. Nilai akan otomatis terupdate setelah kuis diisi & Webhook Google Form terhubung. Klik tombol refresh di atas untuk memeriksa nilai terbaru.
                 </p>
               )}
               {submittedAt && (
-                <div className="flex justify-between items-center text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="flex justify-between items-center text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800">
                   <span>Waktu Dikirim:</span>
                   <span>{new Date(submittedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                 </div>

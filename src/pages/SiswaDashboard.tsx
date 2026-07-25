@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { db } from '../services/db';
+import { syncRowToSupabase } from '../services/supabase';
 import { exportToCSV } from '../utils/export';
 import { Absensi, Asesmen, DaftarTugas, TugasSiswa } from '../types';
 import { StudentAssignmentCard } from '../components/StudentAssignmentCard';
@@ -42,12 +43,22 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
   const siswaKelas = currentSiswa?.kelas || 'Kelas 4';
   const subjects = db.mataPelajaran.getAll().filter(m => !m.kelas || m.kelas === siswaKelas);
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (currentSiswa) {
       const cleanEmail = emailInput.trim().toLowerCase();
       const updated = { ...currentSiswa, fotoUrl: photoUrlInput, email: cleanEmail };
       db.siswa.upsert(updated);
-      setSaveSuccessMsg('Profil & Email berhasil disimpan! Nilai Google Form akan tersinkron otomatis.');
+
+      // Force immediate sync to Supabase `siswa` and `profiles` tables
+      await syncRowToSupabase('siswa', updated, true);
+      await syncRowToSupabase('profiles', {
+        id: currentSiswa.id,
+        full_name: currentSiswa.namaSiswa,
+        email: cleanEmail,
+        role: 'siswa'
+      }, true);
+
+      setSaveSuccessMsg('Profil & Email berhasil disimpan ke Supabase! Nilai Google Form akan tersinkron otomatis.');
       setTimeout(() => setSaveSuccessMsg(''), 4000);
       setShowPhotoModal(false);
     }
