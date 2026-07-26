@@ -211,6 +211,30 @@ export const assignmentService = {
 
     db.tugasSiswa.upsert(sub);
 
+    // Sync to `asesmen` table so grade immediately appears in Penilaian / Asesmen Matrix
+    if (finalScore != null) {
+      const task = db.daftarTugas.getAll().find(t => t.id === assignmentId);
+      const student = db.siswa.getAll().find(s => s.id === studentId);
+
+      const asmItem = {
+        id: `as-${assignmentId}-${studentId}`,
+        siswaId: studentId,
+        mapelId: task?.mapelId || 'mapel-1',
+        tipe: 'harian' as const,
+        namaPenilaian: task?.judulTugas || 'Tugas Google Form',
+        nilai: finalScore,
+        deskripsiKompetensi: `Nilai dari pengerjaan tugas ${task?.judulTugas || ''}`,
+        tanggalPenilaian: todayStr,
+        dinilaiOlehId: task?.dibuatOlehId || 'guru-1',
+        kelas: student?.kelas || task?.kelas || 'Kelas 4-A'
+      };
+
+      db.asesmen.upsert(asmItem);
+      syncRowToSupabase('asesmen', asmItem, true).catch(err => console.warn(err));
+      window.dispatchEvent(new Event('asesmens-updated'));
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+    }
+
     const client = getSupabaseClient();
     if (client) {
       try {
@@ -233,6 +257,29 @@ export const assignmentService = {
 
   async upsertSubmission(sub: TugasSiswa): Promise<{ success: boolean; error?: string }> {
     db.tugasSiswa.upsert(sub);
+
+    const scoreVal = sub.score ?? sub.nilai;
+    if (scoreVal != null) {
+      const task = db.daftarTugas.getAll().find(t => t.id === sub.tugasId);
+      const student = db.siswa.getAll().find(s => s.id === sub.siswaId);
+      const asmItem = {
+        id: `as-${sub.tugasId}-${sub.siswaId}`,
+        siswaId: sub.siswaId,
+        mapelId: task?.mapelId || 'mapel-1',
+        tipe: 'harian' as const,
+        namaPenilaian: task?.judulTugas || 'Tugas Google Form',
+        nilai: scoreVal,
+        deskripsiKompetensi: `Nilai dari pengerjaan tugas ${task?.judulTugas || ''}`,
+        tanggalPenilaian: sub.tanggalDikerjakan || new Date().toISOString().split('T')[0],
+        dinilaiOlehId: task?.dibuatOlehId || 'guru-1',
+        kelas: student?.kelas || task?.kelas || 'Kelas 4-A'
+      };
+      db.asesmen.upsert(asmItem);
+      syncRowToSupabase('asesmen', asmItem, true).catch(err => console.warn(err));
+      window.dispatchEvent(new Event('asesmens-updated'));
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+    }
+
     const res = await syncRowToSupabase('tugas_siswa', sub, true);
     return { success: res.success, error: res.error };
   }

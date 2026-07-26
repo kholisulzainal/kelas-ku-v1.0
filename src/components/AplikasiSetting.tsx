@@ -279,7 +279,7 @@ export function AplikasiSetting() {
             Endpoint Webhook Server Nilai Kuis (POST):
           </label>
           <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl font-mono text-xs text-blue-600 dark:text-blue-400 font-bold select-all border border-slate-300 dark:border-slate-700">
-            {window.location.origin}/api/webhooks/google-form
+            {window.location.origin}/api/webhook/google-form
           </div>
           <p className="text-[11px] text-slate-500">
             Pemicu <code>onFormSubmit</code> di Google Apps Script akan mengirimkan nilai kuis secara otomatis ke endpoint di atas.

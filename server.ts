@@ -55,9 +55,9 @@ async function startServer() {
   });
 
   // =========================================================================
-  // 1. ENDPOINT API WEBHOOK (GOOGLE FORM TO HYBRID TRACKING TAHAP 2)
+  // 1. ENDPOINT API WEBHOOK (GOOGLE FORM TO HYBRID TRACKING TAHAP 2 & ASESMEN)
   // =========================================================================
-  app.post('/api/webhook/google-form', async (req: Request, res: Response) => {
+  const handleGoogleFormWebhook = async (req: Request, res: Response) => {
     try {
       console.log('[Webhook Google Form] Received request body:', req.body);
       console.log('[Webhook Google Form] Headers x-webhook-secret:', req.headers['x-webhook-secret']);
@@ -82,7 +82,9 @@ async function startServer() {
       }
 
       // B. Payload Extraction
-      const { student_email, assignment_id, score_text } = req.body || {};
+      const student_email = req.body?.student_email || req.body?.email || req.body?.nisn || req.body?.student_id;
+      const assignment_id = req.body?.assignment_id || req.body?.tugas_id || req.body?.task_id;
+      const score_text = req.body?.score_text ?? req.body?.score ?? req.body?.nilai;
 
       if (!student_email || !assignment_id || score_text === undefined || score_text === null) {
         return res.status(400).json({
@@ -149,9 +151,11 @@ async function startServer() {
       }
 
       // Ensure student row exists & update email in `siswa` table
+      let studentClass = 'Kelas 4-A';
       try {
-        const { data: existingStudent } = await supabase.from('siswa').select('id, email, nama_siswa').eq('id', studentId).maybeSingle();
+        const { data: existingStudent } = await supabase.from('siswa').select('id, email, nama_siswa, kelas').eq('id', studentId).maybeSingle();
         if (existingStudent) {
+          if (existingStudent.kelas) studentClass = existingStudent.kelas;
           // Update existing student with their email if missing
           if (!existingStudent.email || existingStudent.email !== cleanEmail) {
             await supabase.from('siswa').update({ email: cleanEmail }).eq('id', studentId);
@@ -164,11 +168,34 @@ async function startServer() {
             nama_siswa: studentName || cleanEmail,
             nisn: emailPrefix,
             nis: emailPrefix,
-            kelas: 'Kelas 4-A'
+            kelas: studentClass
           }, { onConflict: 'id' });
         }
       } catch (e) {
         console.warn('[Webhook Google Form] Note on student sync:', e);
+      }
+
+      // D. Fetch Task / Assignment details from `daftar_tugas`
+      let mapelId = 'mapel-1';
+      let judulTugas = 'Kuis Google Form';
+      let taskKelas = studentClass;
+      let dibuatOlehId = 'guru-1';
+
+      try {
+        const { data: taskData } = await supabase
+          .from('daftar_tugas')
+          .select('mapel_id, judul_tugas, kelas, dibuat_oleh_id')
+          .eq('id', cleanAssignmentId)
+          .maybeSingle();
+
+        if (taskData) {
+          if (taskData.mapel_id) mapelId = taskData.mapel_id;
+          if (taskData.judul_tugas) judulTugas = taskData.judul_tugas;
+          if (taskData.kelas) taskKelas = taskData.kelas;
+          if (taskData.dibuat_oleh_id) dibuatOlehId = taskData.dibuat_oleh_id;
+        }
+      } catch (tErr) {
+        console.warn('[Webhook Google Form] Error fetching task details from Supabase:', tErr);
       }
 
       const nowIso = new Date().toISOString();
@@ -178,7 +205,7 @@ async function startServer() {
       const targetStudentIds = Array.from(new Set([studentId, emailPrefix, cleanEmail].filter(Boolean)));
 
       for (const targetId of targetStudentIds) {
-        // D. UPSERT ke tabel `student_assignments`
+        // E. UPSERT ke tabel `student_assignments`
         let { error: saError } = await supabase
           .from('student_assignments')
           .upsert({
@@ -202,7 +229,7 @@ async function startServer() {
             });
         }
 
-        // E. UPSERT ke tabel `tugas_siswa`
+        // F. UPSERT ke tabel `tugas_siswa`
         let { error: tsError } = await supabase
           .from('tugas_siswa')
           .upsert({
@@ -233,15 +260,48 @@ async function startServer() {
               umpan_balik: `Otomatis dikirim via Google Form Webhook pada ${new Date().toLocaleString('id-ID')}`
             });
         }
+
+        // G. UPSERT ke tabel `asesmen` (Halaman Penilaian & Matrix Nilai)
+        let { error: asmError } = await supabase
+          .from('asesmen')
+          .upsert({
+            id: `as-${cleanAssignmentId}-${targetId}`,
+            siswa_id: targetId,
+            mapel_id: mapelId,
+            tipe: 'harian',
+            nama_penilaian: judulTugas,
+            nilai: parsedScore,
+            deskripsi_kompetensi: `Nilai otomatis dari Google Form Webhook (${judulTugas}) pada ${new Date().toLocaleString('id-ID')}`,
+            tanggal_penilaian: todayStr,
+            dinilai_oleh_id: dibuatOlehId,
+            kelas: taskKelas || studentClass
+          }, { onConflict: 'id' });
+
+        if (asmError) {
+          await supabase
+            .from('asesmen')
+            .upsert({
+              siswa_id: targetId,
+              mapel_id: mapelId,
+              tipe: 'harian',
+              nama_penilaian: judulTugas,
+              nilai: parsedScore,
+              deskripsi_kompetensi: `Nilai otomatis dari Google Form Webhook (${judulTugas}) pada ${new Date().toLocaleString('id-ID')}`,
+              tanggal_penilaian: todayStr,
+              dinilai_oleh_id: dibuatOlehId,
+              kelas: taskKelas || studentClass
+            });
+        }
       }
 
-      console.log(`[Webhook Google Form] Sukses update nilai siswa ${studentName || cleanEmail} (${studentId}) untuk tugas ${cleanAssignmentId}: ${parsedScore}`);
+      console.log(`[Webhook Google Form] Sukses update nilai & asesmen siswa ${studentName || cleanEmail} (${studentId}) untuk tugas ${cleanAssignmentId} (${judulTugas}): ${parsedScore}`);
 
       return res.status(200).json({
         success: true,
-        message: 'Status pengerjaan dan nilai tugas siswa berhasil diperbarui melalui Webhook.',
+        message: 'Status pengerjaan, nilai tugas, dan data asesmen penilaian siswa berhasil diperbarui melalui Webhook.',
         data: {
           assignment_id: cleanAssignmentId,
+          assignment_title: judulTugas,
           student_id: studentId,
           student_email: cleanEmail,
           student_name: studentName,
@@ -258,7 +318,11 @@ async function startServer() {
         error: 'Terjadi kesalahan server internal: ' + (err?.message || 'Unknown error')
       });
     }
-  });
+  };
+
+  // Register both singular and plural endpoints
+  app.post('/api/webhook/google-form', handleGoogleFormWebhook);
+  app.post('/api/webhooks/google-form', handleGoogleFormWebhook);
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {

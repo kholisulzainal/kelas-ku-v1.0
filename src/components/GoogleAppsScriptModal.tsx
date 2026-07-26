@@ -99,10 +99,25 @@ ADD COLUMN IF NOT EXISTS score numeric,
 ADD COLUMN IF NOT EXISTS status text DEFAULT 'BELUM_DIKERJAKAN',
 ADD COLUMN IF NOT EXISTS submitted_at timestamptz;
 
--- 6. Buat Index Pencarian Email Cepat
+-- 6. Buat Tabel public.asesmen (Nilai Penilaian & Transkrip) jika belum ada
+CREATE TABLE IF NOT EXISTS public.asesmen (
+  id text PRIMARY KEY,
+  siswa_id text NOT NULL,
+  mapel_id text,
+  tipe text DEFAULT 'harian',
+  nama_penilaian text NOT NULL,
+  nilai numeric NOT NULL,
+  deskripsi_kompetensi text,
+  tanggal_penilaian text,
+  dinilai_oleh_id text,
+  kelas text,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 7. Buat Index Pencarian Email Cepat
 CREATE INDEX IF NOT EXISTS idx_siswa_email ON public.siswa (lower(email));
 
--- 7. Kebijakan Keamanan RLS (Row Level Security)
+-- 8. Kebijakan Keamanan RLS (Row Level Security)
 ALTER TABLE public.siswa ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public read-write for siswa" ON public.siswa;
 CREATE POLICY "Allow public read-write for siswa" ON public.siswa FOR ALL USING (true) WITH CHECK (true);
@@ -114,6 +129,10 @@ CREATE POLICY "Allow public read-write for tugas_siswa" ON public.tugas_siswa FO
 ALTER TABLE public.student_assignments ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public read-write for student_assignments" ON public.student_assignments;
 CREATE POLICY "Allow public read-write for student_assignments" ON public.student_assignments FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.asesmen ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public read-write for asesmen" ON public.asesmen;
+CREATE POLICY "Allow public read-write for asesmen" ON public.asesmen FOR ALL USING (true) WITH CHECK (true);
 `;
 
   const handleCopySql = () => {
