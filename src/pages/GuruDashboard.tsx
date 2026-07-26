@@ -3603,7 +3603,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       {activeTab === 'profil_sekolah' && (
         <div id="school_profile_view" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column: School Profile Overview & Structured Address Card View */}
-          <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm flex flex-col items-center text-center">
+          <div className={`${isOperator ? 'lg:col-span-1' : 'lg:col-span-3 max-w-2xl mx-auto w-full'} bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm flex flex-col items-center text-center`}>
             {sekolah.logoUrl ? (
               <img
                 src={sekolah.logoUrl}
@@ -3642,16 +3642,13 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
               <p><strong>NIP Kepala Sekolah:</strong> {sekolah.nipKepalaSekolah}</p>
             </div>
 
-            {/* NEW Structured Card View for Alamat & Wilayah Sekolah */}
+            {/* Structured Alamat & Wilayah Sekolah */}
             <div className="w-full mt-6 pt-5 border-t border-m3-border dark:border-slate-800 text-left space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                   <MapPin className="w-4 h-4 text-indigo-500" />
                   Detail Alamat & Wilayah
                 </h4>
-                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-full">
-                  Card View
-                </span>
               </div>
 
               <div className="space-y-2 text-xs text-slate-700 dark:text-slate-300">
@@ -3684,7 +3681,6 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                   <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">Kabupaten / Kota</span>
-                      <span className="text-[8px] bg-indigo-200/60 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200 px-1 py-0.2 rounded font-bold">Cetak PDF</span>
                     </div>
                     <span className="font-black text-indigo-900 dark:text-indigo-200 block mt-0.5">{sekolah.kabupaten || '-'}</span>
                   </div>
@@ -3709,238 +3705,236 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
             </div>
           </div>
 
-          {/* Right Column: Manage School Form */}
-          <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-              <School className="w-5 h-5 text-m3-purple" />
-              Kelola Profil Sekolah Resmi
-            </h3>
-            <form onSubmit={handleSubmit(onUpdateSchool)} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Nama Instansi Sekolah</label>
-                  <input
-                    type="text"
-                    disabled={!isCurrentGuruWaliKelas}
-                    defaultValue={sekolah.namaSekolah}
-                    {...register('namaSekolah', { required: true })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">NPSN</label>
-                  <input
-                    type="text"
-                    disabled={!isCurrentGuruWaliKelas}
-                    defaultValue={sekolah.npsn}
-                    {...register('npsn', { required: true })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Nama Kepala Sekolah</label>
-                  <input
-                    type="text"
-                    disabled={!isCurrentGuruWaliKelas}
-                    defaultValue={sekolah.kepalaSekolah}
-                    {...register('kepalaSekolah', { required: true })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">NIP Kepala Sekolah</label>
-                  <input
-                    type="text"
-                    disabled={!isCurrentGuruWaliKelas}
-                    defaultValue={sekolah.nipKepalaSekolah}
-                    {...register('nipKepalaSekolah', { required: true })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Akreditasi</label>
-                  <select
-                    disabled={!isCurrentGuruWaliKelas}
-                    defaultValue={sekolah.akreditasi}
-                    {...register('akreditasi')}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
-                  >
-                    <option value="A">Sangat Baik (A)</option>
-                    <option value="B">Baik (B)</option>
-                    <option value="C">Cukup (C)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Tahun Pelajaran Aktif</label>
-                  <input
-                    type="text"
-                    disabled={!isCurrentGuruWaliKelas}
-                    defaultValue={sekolah.tahunPelajaran || '2025/2026'}
-                    placeholder="Contoh: 2025/2026"
-                    {...register('tahunPelajaran')}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold text-m3-purple dark:text-indigo-400 disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-
-
-                <div className="md:col-span-2 space-y-3 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800/80">
-                  <div className="border-b border-slate-100 dark:border-slate-800 pb-1.5">
-                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300">Logo Instansi Sekolah</label>
+          {/* Right Column: Manage School Form (Hanya Operator) */}
+          {isOperator && (
+            <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
+                <School className="w-5 h-5 text-m3-purple" />
+                Kelola Profil Sekolah
+              </h3>
+              <form onSubmit={handleSubmit(onUpdateSchool)} className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Nama Instansi Sekolah</label>
+                    <input
+                      type="text"
+                      disabled={!isCurrentGuruWaliKelas}
+                      defaultValue={sekolah.namaSekolah}
+                      {...register('namaSekolah', { required: true })}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
                   </div>
-                  
-                  <div className="flex items-center gap-4">
-                    {watchLogoUrl || sekolah.logoUrl ? (
-                      <img src={watchLogoUrl || sekolah.logoUrl} alt="Preview Logo" className="w-16 h-16 rounded-2xl object-cover border-2 border-m3-purple shadow-sm shrink-0" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center border-2 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold text-sm shrink-0">SD</div>
-                    )}
-                    {isOperator ? (
-                      <div className="flex-1 space-y-2">
-                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-xs">
-                          <Camera className="w-3.5 h-3.5" />
-                          <span>Upload Logo Baru</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            disabled={!isOperator}
-                            onChange={handleSchoolLogoChange}
-                            className="hidden"
-                          />
-                        </label>
-                        <div className="space-y-0.5">
-                          <input
-                            type="text"
-                            placeholder="Atau tempel URL gambar di sini..."
-                            disabled={!isOperator}
-                            {...register('logoUrl')}
-                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none text-slate-800 dark:text-white"
-                          />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">NPSN</label>
+                    <input
+                      type="text"
+                      disabled={!isCurrentGuruWaliKelas}
+                      defaultValue={sekolah.npsn}
+                      {...register('npsn', { required: true })}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Nama Kepala Sekolah</label>
+                    <input
+                      type="text"
+                      disabled={!isCurrentGuruWaliKelas}
+                      defaultValue={sekolah.kepalaSekolah}
+                      {...register('kepalaSekolah', { required: true })}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">NIP Kepala Sekolah</label>
+                    <input
+                      type="text"
+                      disabled={!isCurrentGuruWaliKelas}
+                      defaultValue={sekolah.nipKepalaSekolah}
+                      {...register('nipKepalaSekolah', { required: true })}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Akreditasi</label>
+                    <select
+                      disabled={!isCurrentGuruWaliKelas}
+                      defaultValue={sekolah.akreditasi}
+                      {...register('akreditasi')}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+                    >
+                      <option value="A">Sangat Baik (A)</option>
+                      <option value="B">Baik (B)</option>
+                      <option value="C">Cukup (C)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Tahun Pelajaran Aktif</label>
+                    <input
+                      type="text"
+                      disabled={!isCurrentGuruWaliKelas}
+                      defaultValue={sekolah.tahunPelajaran || '2025/2026'}
+                      placeholder="Contoh: 2025/2026"
+                      {...register('tahunPelajaran')}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold text-m3-purple dark:text-indigo-400 disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 space-y-3 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800/80">
+                    <div className="border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300">Logo Instansi Sekolah</label>
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                      {watchLogoUrl || sekolah.logoUrl ? (
+                        <img src={watchLogoUrl || sekolah.logoUrl} alt="Preview Logo" className="w-16 h-16 rounded-2xl object-cover border-2 border-m3-purple shadow-sm shrink-0" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center border-2 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold text-sm shrink-0">SD</div>
+                      )}
+                      {isOperator ? (
+                        <div className="flex-1 space-y-2">
+                          <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-xs">
+                            <Camera className="w-3.5 h-3.5" />
+                            <span>Upload Logo Baru</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={!isOperator}
+                              onChange={handleSchoolLogoChange}
+                              className="hidden"
+                            />
+                          </label>
+                          <div className="space-y-0.5">
+                            <input
+                              type="text"
+                              placeholder="Atau tempel URL gambar di sini..."
+                              disabled={!isOperator}
+                              {...register('logoUrl')}
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none text-slate-800 dark:text-white"
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-slate-400 font-medium">Pengunggahan logo hanya dapat diakses oleh Administrator/Operator.</div>
-                    )}
+                      ) : (
+                        <div className="text-xs text-slate-400 font-medium">Pengunggahan logo hanya dapat diakses oleh Administrator/Operator.</div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Structured Address Fields Section (Per Kolom) */}
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
-                <div>
-                  <h4 className="text-xs font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                    <Building2 className="w-4 h-4 text-m3-purple" />
-                    Rincian Alamat Sekolah & Wilayah (Per Kolom)
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Isi rincian per kolom di bawah ini. Sistem akan otomatis menggabungkannya ke deskripsi alamat dan menyinkronkan Kabupaten/Kota sebagai Lokasi Cetak Laporan PDF.
-                  </p>
+                {/* Structured Address Fields Section (Per Kolom) */}
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                  <div>
+                    <h4 className="text-xs font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 className="w-4 h-4 text-m3-purple" />
+                      Rincian Alamat Sekolah & Wilayah (Per Kolom)
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Isi rincian per kolom di bawah ini. Sistem akan otomatis menggabungkannya ke deskripsi alamat dan menyinkronkan Kabupaten/Kota sebagai Lokasi Cetak Laporan PDF.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Jalan</label>
+                      <input
+                        type="text"
+                        disabled={!isCurrentGuruWaliKelas}
+                        defaultValue={sekolah.jalan || ''}
+                        placeholder="Misal: Jl. Pemuda No. 45"
+                        {...register('jalan')}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">RT / RW</label>
+                      <input
+                        type="text"
+                        disabled={!isCurrentGuruWaliKelas}
+                        defaultValue={sekolah.rtRw || ''}
+                        placeholder="Misal: RT 02/RW 05"
+                        {...register('rtRw')}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Dusun</label>
+                      <input
+                        type="text"
+                        disabled={!isCurrentGuruWaliKelas}
+                        defaultValue={sekolah.dusun || ''}
+                        placeholder="Misal: Dusun Melati"
+                        {...register('dusun')}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Desa / Kelurahan</label>
+                      <input
+                        type="text"
+                        disabled={!isCurrentGuruWaliKelas}
+                        defaultValue={sekolah.desa || ''}
+                        placeholder="Misal: Desa Sukamaju"
+                        {...register('desa')}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Kecamatan</label>
+                      <input
+                        type="text"
+                        disabled={!isCurrentGuruWaliKelas}
+                        defaultValue={sekolah.kecamatan || ''}
+                        placeholder="Misal: Sukamaju"
+                        {...register('kecamatan')}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-extrabold text-indigo-600 dark:text-indigo-400 mb-1 flex items-center justify-between">
+                        <span>Nama Kabupaten / Kota</span>
+                        <span className="text-[10px] text-indigo-500 font-normal">Lokasi Cetak PDF</span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!isCurrentGuruWaliKelas}
+                        defaultValue={sekolah.kabupaten || ''}
+                        placeholder="Misal: Kota Bandung / Kab. Semarang"
+                        {...register('kabupaten')}
+                        className="w-full bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-xl px-3.5 py-2 text-xs font-bold text-indigo-900 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500/30 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Provinsi</label>
+                      <input
+                        type="text"
+                        disabled={!isCurrentGuruWaliKelas}
+                        defaultValue={sekolah.provinsi || ''}
+                        placeholder="Misal: Jawa Barat"
+                        {...register('provinsi')}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Kode Pos</label>
+                      <input
+                        type="text"
+                        disabled={!isCurrentGuruWaliKelas}
+                        defaultValue={sekolah.kodePos || ''}
+                        placeholder="Misal: 40123"
+                        {...register('kodePos')}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Jalan</label>
-                    <input
-                      type="text"
-                      disabled={!isCurrentGuruWaliKelas}
-                      defaultValue={sekolah.jalan || ''}
-                      placeholder="Misal: Jl. Pemuda No. 45"
-                      {...register('jalan')}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">RT / RW</label>
-                    <input
-                      type="text"
-                      disabled={!isCurrentGuruWaliKelas}
-                      defaultValue={sekolah.rtRw || ''}
-                      placeholder="Misal: RT 02/RW 05"
-                      {...register('rtRw')}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Dusun</label>
-                    <input
-                      type="text"
-                      disabled={!isCurrentGuruWaliKelas}
-                      defaultValue={sekolah.dusun || ''}
-                      placeholder="Misal: Dusun Melati"
-                      {...register('dusun')}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Desa / Kelurahan</label>
-                    <input
-                      type="text"
-                      disabled={!isCurrentGuruWaliKelas}
-                      defaultValue={sekolah.desa || ''}
-                      placeholder="Misal: Desa Sukamaju"
-                      {...register('desa')}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Kecamatan</label>
-                    <input
-                      type="text"
-                      disabled={!isCurrentGuruWaliKelas}
-                      defaultValue={sekolah.kecamatan || ''}
-                      placeholder="Misal: Sukamaju"
-                      {...register('kecamatan')}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-extrabold text-indigo-600 dark:text-indigo-400 mb-1 flex items-center justify-between">
-                      <span>Nama Kabupaten / Kota</span>
-                      <span className="text-[10px] text-indigo-500 font-normal">Lokasi Cetak PDF</span>
-                    </label>
-                    <input
-                      type="text"
-                      disabled={!isCurrentGuruWaliKelas}
-                      defaultValue={sekolah.kabupaten || ''}
-                      placeholder="Misal: Kota Bandung / Kab. Semarang"
-                      {...register('kabupaten')}
-                      className="w-full bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-xl px-3.5 py-2 text-xs font-bold text-indigo-900 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500/30 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Provinsi</label>
-                    <input
-                      type="text"
-                      disabled={!isCurrentGuruWaliKelas}
-                      defaultValue={sekolah.provinsi || ''}
-                      placeholder="Misal: Jawa Barat"
-                      {...register('provinsi')}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Kode Pos</label>
-                    <input
-                      type="text"
-                      disabled={!isCurrentGuruWaliKelas}
-                      defaultValue={sekolah.kodePos || ''}
-                      placeholder="Misal: 40123"
-                      {...register('kodePos')}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {isCurrentGuruWaliKelas ? (
                 <button
                   type="submit"
                   id="save_school_btn"
@@ -3948,13 +3942,9 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 >
                   Simpan Perubahan
                 </button>
-              ) : (
-                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 rounded-xl text-xs font-semibold">
-                  <span>Hanya Wali Kelas (Administrator) yang diperbolehkan mengubah data profil sekolah.</span>
-                </div>
-              )}
-            </form>
-          </div>
+              </form>
+            </div>
+          )}
 
           {/* Kelola Kredensial Operator (Hanya terlihat oleh Operator) */}
           {isOperator && (
