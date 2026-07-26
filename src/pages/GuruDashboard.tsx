@@ -44,6 +44,9 @@ import {
   Code
 } from 'lucide-react';
 import { GoogleAppsScriptModal } from '../components/GoogleAppsScriptModal';
+import { AplikasiSetting } from '../components/AplikasiSetting';
+import { BukuDigitalView } from '../components/BukuDigitalView';
+import { AsesmenMatrixTable } from '../components/AsesmenMatrixTable';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { db } from '../services/db';
 import { syncRowToSupabase } from '../services/supabase';
@@ -1193,13 +1196,15 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       });
     } else if (activeTab === 'tugas_harian') {
       const defaultMapel = mapels.find(m => isCurrentGuruWaliKelas || m.guruPengampuId === loggedInUserId)?.id || mapels[0]?.id || '';
+      const defaultKelas = activeClassFilter !== 'Semua' ? activeClassFilter : (loggedInGuru?.kelasWali || classList[0] || 'Kelas 1');
       reset({
         judulTugas: '',
         deskripsi: '',
         mapelId: defaultMapel,
         googleFormUrl: '',
         tanggalDiberikan: new Date().toISOString().split('T')[0],
-        tenggatWaktu: '2026-07-25T23:59'
+        tenggatWaktu: '2026-07-25T23:59',
+        kelas: defaultKelas
       });
     } else if (activeTab === 'asesmen') {
       const filteredSiswa = siswas.filter(s => activeClassFilter === 'Semua' || s.kelas === activeClassFilter);
@@ -1532,7 +1537,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
 
   // F. TUGAS (GOOGLE FORM INTEGRATION) CRUD
   const onSubmitTugas = async (data: any) => {
-    const classToAssign = activeClassFilter !== 'Semua' ? activeClassFilter : (loggedInGuru?.kelasWali || 'Kelas 4');
+    const classToAssign = data.kelas || (activeClassFilter !== 'Semua' ? activeClassFilter : (loggedInGuru?.kelasWali || 'Kelas 1'));
     const item: DaftarTugas = {
       id: editingItem?.id || `tugas-${Date.now()}`,
       mapelId: data.mapelId,
@@ -5684,181 +5689,14 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
               </button>
             </div>
 
-            {/* Sub Tab 1: DAFTAR NILAI */}
+            {/* Sub Tab 1: DAFTAR NILAI (EXCEL MATRIX TABLE TERSTRUKTUR) */}
             {asesmenSubTab === 'daftar' && (
-              <div className="space-y-4">
-                <div className="flex flex-wrap justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm gap-4">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800 dark:text-white">Asesmen Kurikulum Merdeka</h3>
-                    <p className="text-xs text-slate-500">Nilai formatif harian, Sumatif Tengah Semester (STS), Sumatif Akhir Semester (SAS), Kokurikuler (P5)</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Cari nilai (siswa, mapel, tgl, dll)..."
-                        value={asesmenSearch}
-                        onChange={(e) => setAsesmenSearch(e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs focus:ring-1 focus:ring-m3-purple focus:outline-none w-56"
-                      />
-                    </div>
-                    <select
-                      value={filterAsesmenType}
-                      onChange={(e) => setFilterAsesmenType(e.target.value as any)}
-                      className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold"
-                    >
-                      <option value="all">Semua Tipe Asesmen</option>
-                      <option value="harian">Formatif (Harian)</option>
-                      <option value="sts">Sumatif Tengah (STS)</option>
-                      <option value="sas">Sumatif Akhir (SAS)</option>
-                      <option value="kokurikuler">Kokurikuler (P5)</option>
-                    </select>
-                    <button
-                      id="export_asesmen_excel_btn"
-                      onClick={exportAsesmenExcel}
-                      className="bg-teal-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-teal-700 shadow-md"
-                      title="Ekspor laporan nilai format Excel (.xlsx)"
-                    >
-                      <FileSpreadsheet className="w-4 h-4" />
-                      Unduh Excel Nilai
-                    </button>
-                    <button
-                      id="export_asesmen_pdf_btn"
-                      onClick={exportAsesmenPDF}
-                      className="bg-indigo-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-indigo-700 shadow-md"
-                      title="Ekspor laporan nilai format PDF (A4)"
-                    >
-                      <FileText className="w-4 h-4" />
-                      Unduh PDF Nilai
-                    </button>
-                    <button
-                      id="export_asesmen_btn"
-                      onClick={exportAsesmenCSV}
-                      className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-emerald-700 shadow-md"
-                    >
-                      <FileSpreadsheet className="w-4 h-4" />
-                      Unduh Excel Nilai
-                    </button>
-                    <button
-                      id="add_asesmen_btn"
-                      onClick={handleOpenAddModal}
-                      className="bg-m3-purple text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-m3-purple-dark shadow-md"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Input Nilai
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-900 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-m3-lavender/50 dark:bg-slate-800/50 text-m3-sec-text dark:text-slate-400 font-bold text-xs uppercase">
-                        <tr>
-                          <th className="px-6 py-4">Nama Siswa</th>
-                          <th className="px-6 py-4">Mata Pelajaran</th>
-                          <th className="px-6 py-4">Tipe / Penilaian</th>
-                          <th className="px-6 py-4">Skor / Nilai</th>
-                          <th className="px-6 py-4">Deskripsi Kompetensi</th>
-                          <th className="px-6 py-4 text-right">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-m3-border dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                        {(() => {
-                          const filtered = asesmens
-                            .filter(a => isCurrentGuruWaliKelas || myMapelIds.includes(a.mapelId))
-                            .filter(a => filterAsesmenType === 'all' || a.tipe === filterAsesmenType)
-                            .filter(a => {
-                              if (activeClassFilter === 'Semua') return true;
-                              const student = siswas.find(s => s.id === a.siswaId);
-                              return student?.kelas === activeClassFilter;
-                            })
-                            .filter(a => {
-                              if (!asesmenSearch.trim()) return true;
-                              const query = asesmenSearch.toLowerCase();
-                              const siswa = siswas.find(s => s.id === a.siswaId);
-                              const mapel = mapels.find(m => m.id === a.mapelId);
-                              
-                              const matchSiswa = siswa?.namaSiswa.toLowerCase().includes(query) || siswa?.nisn.includes(query);
-                              const matchPenilaian = a.namaPenilaian.toLowerCase().includes(query);
-                              const matchMapel = mapel?.namaMapel.toLowerCase().includes(query);
-                              const matchDate = a.tanggalPenilaian?.toLowerCase().includes(query);
-                              const matchTipe = a.tipe.toLowerCase().includes(query);
-
-                              return !!(matchSiswa || matchPenilaian || matchMapel || matchDate || matchTipe);
-                            });
-
-                          if (filtered.length === 0) {
-                            return (
-                              <tr>
-                                <td colSpan={6} className="px-6 py-12 text-center text-xs text-slate-500">
-                                  Data asesmen tidak ditemukan untuk pencarian "{asesmenSearch}"
-                                </td>
-                              </tr>
-                            );
-                          }
-
-                          return filtered.map((a) => {
-                            const siswa = siswas.find(s => s.id === a.siswaId);
-                            const mapel = mapels.find(m => m.id === a.mapelId);
-
-                            return (
-                              <tr key={a.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all">
-                                <td className="px-6 py-4 font-bold text-slate-800 dark:text-white">
-                                  {siswa ? siswa.namaSiswa : 'Siswa'}
-                                </td>
-                                <td className="px-6 py-4 font-semibold">{mapel ? mapel.namaMapel : 'Mapel'}</td>
-                                <td className="px-6 py-4">
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className={`w-fit px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded-md ${
-                                      a.tipe === 'harian' ? 'bg-m3-lavender text-m3-purple dark:bg-indigo-950 dark:text-indigo-400' :
-                                      a.tipe === 'sts' ? 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400' :
-                                      a.tipe === 'sas' ? 'bg-purple-50 text-purple-600 dark:bg-purple-950 dark:text-purple-400' :
-                                      'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400'
-                                    }`}>
-                                      {a.tipe}
-                                    </span>
-                                    <span className="text-xs text-slate-400 font-medium">{a.namaPenilaian}</span>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                  <span className={`font-mono text-sm font-bold ${a.nilai >= 75 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
-                                    {a.nilai} Poin
-                                  </span>
-                                </td>
-                                <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">{a.deskripsiKompetensi || '-'}</td>
-                                <td className="px-6 py-4 text-right flex justify-end gap-2 mt-1">
-                                  {(isCurrentGuruWaliKelas || myMapelIds.includes(a.mapelId)) ? (
-                                    <>
-                                      <button
-                                        id={`edit_asesmen_${a.id}`}
-                                        onClick={() => handleOpenEditModal(a)}
-                                        className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-amber-500 hover:bg-amber-100/50 dark:hover:bg-amber-950/10 cursor-pointer"
-                                      >
-                                        <Edit2 className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        id={`delete_asesmen_${a.id}`}
-                                        onClick={() => onDeleteAsesmen(a.id)}
-                                        className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-red-500 hover:bg-red-100/50 dark:hover:bg-red-950/10 cursor-pointer"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <span className="text-xs text-slate-400">Hanya Lihat</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
+              <AsesmenMatrixTable
+                currentRole="operator"
+                activeClassFilter={activeClassFilter}
+                loggedInUserId={loggedInUserId}
+                isCurrentGuruWaliKelas={isCurrentGuruWaliKelas}
+              />
             )}
 
             {/* Sub Tab 2: REKAPITULASI & ANALISIS */}
@@ -6117,6 +5955,16 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
             })}
           </div>
         </div>
+      )}
+
+      {/* 10. BUKU DIGITAL & MODUL */}
+      {activeTab === 'buku_digital_admin' && (
+        <BukuDigitalView currentRole="operator" currentUserId={loggedInUserId} />
+      )}
+
+      {/* 11. PENGATURAN APLIKASI OPERATOR */}
+      {activeTab === 'aplikasi_setting' && (
+        <AplikasiSetting />
       )}
 
       {/* DYNAMIC MODAL FORM BASED ON ACTIVE TAB */}

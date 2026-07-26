@@ -11,6 +11,7 @@ import {
   Asesmen,
   TemuanKhusus,
   Notifikasi,
+  BukuDigital,
   UserRole
 } from '../types';
 import { syncRowToSupabase, deleteRowFromSupabase } from './supabase';
@@ -86,6 +87,9 @@ const initDatabase = () => {
   }
   if (!localStorage.getItem('notifikasi')) {
     localStorage.setItem('notifikasi', '[]');
+  }
+  if (!localStorage.getItem('buku_digital')) {
+    localStorage.setItem('buku_digital', '[]');
   }
   if (!localStorage.getItem('current_user_role')) {
     localStorage.setItem('current_user_role', 'operator');
@@ -679,6 +683,41 @@ export const db = {
       const list = db.notifikasi.getAll();
       const updated = list.map(n => n.penerimaRole === role ? { ...n, dibaca: true } : n);
       db.notifikasi.save(updated);
+    }
+  },
+
+  // 13. Buku Digital
+  bukuDigital: {
+    getAll: (): BukuDigital[] => {
+      const data = localStorage.getItem('buku_digital');
+      return data ? JSON.parse(data) : [];
+    },
+    save: (items: BukuDigital[]) => {
+      localStorage.setItem('buku_digital', JSON.stringify(items));
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'buku_digital' } }));
+    },
+    upsert: (item: BukuDigital) => {
+      const list = db.bukuDigital.getAll();
+      const finalItem = {
+        ...item,
+        id: item.id || `book-${Date.now()}`,
+        createdAt: item.createdAt || new Date().toISOString()
+      };
+      const idx = list.findIndex(b => b.id === finalItem.id);
+      if (idx > -1) {
+        list[idx] = finalItem;
+      } else {
+        list.push(finalItem);
+      }
+      db.bukuDigital.save(list);
+      syncRowToSupabase('buku_digital', finalItem);
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'buku_digital' } }));
+    },
+    delete: (id: string) => {
+      const list = db.bukuDigital.getAll().filter(b => b.id !== id);
+      db.bukuDigital.save(list);
+      deleteRowFromSupabase('buku_digital', id);
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'buku_digital' } }));
     }
   },
 

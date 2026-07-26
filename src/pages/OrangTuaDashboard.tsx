@@ -15,6 +15,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { db } from '../services/db';
 import { exportToCSV } from '../utils/export';
 import { Absensi, Asesmen, DaftarTugas, TugasSiswa } from '../types';
+import { BukuDigitalView } from '../components/BukuDigitalView';
 
 interface OrangTuaDashboardProps {
   activeTab: string;
@@ -473,6 +474,13 @@ export function OrangTuaDashboard({ activeTab, parentId }: OrangTuaDashboardProp
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 4. BUKU DIGITAL SAYA */}
+      {activeTab === 'buku_digital' && (
+        <div id="parent_digital_books_view">
+          <BukuDigitalView currentRole="orang_tua" studentKelas={childKelas} />
         </div>
       )}
     </div>

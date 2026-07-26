@@ -19,6 +19,7 @@ import { syncRowToSupabase } from '../services/supabase';
 import { exportToCSV } from '../utils/export';
 import { Absensi, Asesmen, DaftarTugas, TugasSiswa } from '../types';
 import { StudentAssignmentCard } from '../components/StudentAssignmentCard';
+import { BukuDigitalView } from '../components/BukuDigitalView';
 
 interface SiswaDashboardProps {
   activeTab: string;
@@ -533,6 +534,13 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 4. BUKU DIGITAL SAYA */}
+      {activeTab === 'buku_digital' && (
+        <div id="student_digital_books_view">
+          <BukuDigitalView currentRole="siswa" currentUserId={siswaId} />
         </div>
       )}
 

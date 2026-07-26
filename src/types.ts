@@ -186,3 +186,18 @@ export interface Notifikasi {
   dibaca: boolean;
   tugasId?: string;
 }
+
+export interface BukuDigital {
+  id: string;
+  judul: string;
+  kelas: string; // e.g., "Kelas 1", "Kelas 4", "Semua Kelas"
+  kategoriBuku?: 'buku_siswa' | 'buku_guru' | 'buku_non_teks';
+  mapelId?: string;
+  mapelNama: string;
+  fileUrl: string; // PDF URL or Google Drive embed URL
+  coverUrl?: string;
+  deskripsi?: string;
+  penulis?: string;
+  uploadedBy?: string;
+  createdAt: string;
+}

@@ -10,7 +10,9 @@ import {
   AlertOctagon,
   FileText,
   Bookmark,
-  GraduationCap
+  GraduationCap,
+  Settings,
+  Library
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -23,7 +25,7 @@ interface SidebarProps {
 export function Sidebar({ currentRole, activeTab, setActiveTab }: SidebarProps) {
   // Navigation items based on role
   const getNavItems = () => {
-    if (currentRole === 'operator' || currentRole === 'guru') {
+    if (currentRole === 'operator') {
       return [
         { id: 'profil_sekolah', label: 'Profil Sekolah', icon: School },
         { id: 'profil_guru', label: 'Profil Guru', icon: UserCheck },
@@ -33,6 +35,22 @@ export function Sidebar({ currentRole, activeTab, setActiveTab }: SidebarProps) 
         { id: 'absensi', label: 'Absensi Siswa', icon: CheckSquare },
         { id: 'tugas_harian', label: 'Tugas Google Form', icon: Bookmark },
         { id: 'asesmen', label: 'Asesmen Kurikulum', icon: Award },
+        { id: 'buku_digital_admin', label: 'Buku Digital & Modul', icon: Library },
+        { id: 'temuan_khusus', label: 'Temuan Khusus', icon: AlertOctagon },
+        { id: 'kalender_akademik', label: 'Kalender & Jadwal', icon: FileText },
+        { id: 'aplikasi_setting', label: 'Pengaturan Aplikasi', icon: Settings }
+      ];
+    } else if (currentRole === 'guru') {
+      return [
+        { id: 'profil_sekolah', label: 'Profil Sekolah', icon: School },
+        { id: 'profil_guru', label: 'Profil Guru', icon: UserCheck },
+        { id: 'mata_pelajaran', label: 'Mata Pelajaran', icon: BookOpen },
+        { id: 'jadwal_pelajaran', label: 'Jadwal Pelajaran', icon: Calendar },
+        { id: 'data_siswa', label: 'Data Siswa', icon: Users },
+        { id: 'absensi', label: 'Absensi Siswa', icon: CheckSquare },
+        { id: 'tugas_harian', label: 'Tugas Google Form', icon: Bookmark },
+        { id: 'asesmen', label: 'Asesmen Kurikulum', icon: Award },
+        { id: 'buku_digital_admin', label: 'Buku Digital & Modul', icon: Library },
         { id: 'temuan_khusus', label: 'Temuan Khusus', icon: AlertOctagon },
         { id: 'kalender_akademik', label: 'Kalender & Jadwal', icon: FileText }
       ];
@@ -41,6 +59,7 @@ export function Sidebar({ currentRole, activeTab, setActiveTab }: SidebarProps) 
         { id: 'siswa_tugas', label: 'Tugas Harian Saya', icon: Bookmark },
         { id: 'siswa_nilai', label: 'Laporan Nilai Saya', icon: Award },
         { id: 'siswa_absensi', label: 'Rekap Absensi Saya', icon: CheckSquare },
+        { id: 'buku_digital', label: 'Buku Digital', icon: Library },
         { id: 'kalender_akademik', label: 'Kalender & Jadwal Kelas', icon: Calendar }
       ];
     } else {
@@ -49,6 +68,7 @@ export function Sidebar({ currentRole, activeTab, setActiveTab }: SidebarProps) 
         { id: 'ortu_notif_tugas', label: 'Status Tugas Anak', icon: Bookmark },
         { id: 'ortu_rekap_nilai', label: 'Laporan Nilai Anak', icon: Award },
         { id: 'ortu_absensi', label: 'Kehadiran Anak', icon: CheckSquare },
+        { id: 'buku_digital', label: 'Buku Digital', icon: Library },
         { id: 'kalender_akademik', label: 'Kalender Sekolah', icon: Calendar }
       ];
     }
