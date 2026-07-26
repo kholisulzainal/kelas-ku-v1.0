@@ -420,6 +420,22 @@ CREATE TABLE IF NOT EXISTS public.ppdb (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 16. Buku Digital
+CREATE TABLE IF NOT EXISTS public.buku_digital (
+  id text PRIMARY KEY DEFAULT ('book-' || extract(epoch from now())::bigint),
+  judul text NOT NULL,
+  kelas text NOT NULL DEFAULT 'Kelas 1',
+  kategori_buku text DEFAULT 'buku_siswa',
+  mapel_id text,
+  mapel_nama text NOT NULL,
+  file_url text NOT NULL,
+  cover_url text,
+  deskripsi text,
+  penulis text,
+  uploaded_by text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- SUPABASE STORAGE BUCKETS
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
@@ -448,9 +464,10 @@ BEGIN
     'profil_sekolah','profiles','guru','data_kelas','siswa','orang_tua',
     'mata_pelajaran','jadwal_pelajaran','absensi','daftar_tugas','tugas_siswa',
     'assignments','student_assignments',
-    'asesmen','temuan_khusus','notifikasi','news','gallery','application_settings','ppdb'
+    'asesmen','temuan_khusus','notifikasi','news','gallery','application_settings','ppdb','buku_digital'
   ])
   LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS "Public access" ON public.%I', t);
     EXECUTE format('CREATE POLICY "Public access" ON public.%I FOR ALL USING (true) WITH CHECK (true)', t);
   END LOOP;
@@ -481,7 +498,8 @@ const VALID_COLUMNS: { [key: string]: string[] } = {
   news: ['id', 'judul', 'konten', 'kategori', 'penulis', 'tanggal', 'thumbnail_url', 'published'],
   gallery: ['id', 'judul', 'deskripsi', 'image_url', 'kategori', 'tanggal'],
   application_settings: ['id', 'theme', 'primary_color', 'secondary_color', 'website_title', 'footer_text', 'vision', 'mission', 'welcome_message'],
-  ppdb: ['id', 'nama_lengkap', 'nisn', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'nama_ayah', 'nama_ibu', 'no_telepon_ortu', 'alamat', 'status_pendaftaran', 'dokumen_url', 'foto_url']
+  ppdb: ['id', 'nama_lengkap', 'nisn', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'nama_ayah', 'nama_ibu', 'no_telepon_ortu', 'alamat', 'status_pendaftaran', 'dokumen_url', 'foto_url'],
+  buku_digital: ['id', 'judul', 'kelas', 'kategori_buku', 'mapel_id', 'mapel_nama', 'file_url', 'cover_url', 'deskripsi', 'penulis', 'uploaded_by', 'created_at']
 };
 
 const DEFAULT_SISWA_NISNS: { [id: string]: string } = {
@@ -1111,7 +1129,8 @@ export async function syncAllToSupabase(): Promise<{ success: boolean; results?:
     { name: 'news', isArray: true },
     { name: 'gallery', isArray: true },
     { name: 'application_settings', isArray: false },
-    { name: 'ppdb', isArray: true }
+    { name: 'ppdb', isArray: true },
+    { name: 'buku_digital', isArray: true }
   ];
 
   const results: SyncResults = {};
@@ -1220,7 +1239,8 @@ export async function pullAllFromSupabase(): Promise<{ success: boolean; error?:
     { dbName: 'news', localName: 'news_articles', isArray: true },
     { dbName: 'gallery', localName: 'gallery_items', isArray: true },
     { dbName: 'application_settings', localName: 'app_settings', isArray: false },
-    { dbName: 'ppdb', localName: 'ppdb_applicants', isArray: true }
+    { dbName: 'ppdb', localName: 'ppdb_applicants', isArray: true },
+    { dbName: 'buku_digital', localName: 'buku_digital', isArray: true }
   ];
 
   try {

@@ -216,13 +216,20 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
     return matchKelas && matchMapel && matchSearch;
   });
 
-  // Convert Google Drive view URL to preview embed URL
+  // Convert Google Drive view URL or direct PDF URLs to embeddable viewer URLs
   const getEmbeddablePdfUrl = (url: string) => {
     if (!url) return '';
-    if (url.includes('drive.google.com') && url.includes('/view')) {
-      return url.replace('/view', '/preview');
+    const trimmed = url.trim();
+    if (trimmed.includes('drive.google.com')) {
+      if (trimmed.includes('/view')) {
+        return trimmed.replace('/view', '/preview');
+      }
+      return trimmed;
     }
-    return url;
+    if (trimmed.toLowerCase().endsWith('.pdf') || trimmed.includes('buku.kemdikbud.go.id') || trimmed.includes('pdf')) {
+      return `https://docs.google.com/viewer?url=${encodeURIComponent(trimmed)}&embedded=true`;
+    }
+    return trimmed;
   };
 
   // Badge renderer for book categories

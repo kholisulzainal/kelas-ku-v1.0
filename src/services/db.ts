@@ -50,6 +50,82 @@ const defaultAsesmen: Asesmen[] = [];
 const defaultTemuanKhusus: TemuanKhusus[] = [];
 const defaultNotifikasi: Notifikasi[] = [];
 
+// Default digital library collection (Kemendikbudristek Kurikulum Merdeka)
+const defaultBukuDigital: BukuDigital[] = [
+  {
+    id: 'book-sd-1-bindo',
+    judul: 'Bahasa Indonesia: Aku Bisa! Kelas I',
+    kelas: 'Kelas 1',
+    kategoriBuku: 'buku_siswa',
+    mapelNama: 'Bahasa Indonesia',
+    fileUrl: 'https://buku.kemdikbud.go.id/catalogue/pdf/bahasa-indonesia-kelas-1-bs.pdf',
+    coverUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
+    deskripsi: 'Buku Teks Siswa Bahasa Indonesia SD Kelas 1 Kurikulum Merdeka Kemendikbudristek.',
+    penulis: 'Eti Nurhayati & Widia Pekerti',
+    createdAt: '2025-01-10T08:00:00.000Z'
+  },
+  {
+    id: 'book-sd-4-mtk',
+    judul: 'Matematika Vol 1 SD Kelas IV',
+    kelas: 'Kelas 4',
+    kategoriBuku: 'buku_siswa',
+    mapelNama: 'Matematika',
+    fileUrl: 'https://buku.kemdikbud.go.id/catalogue/pdf/matematika-kelas-4-bs.pdf',
+    coverUrl: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=600&q=80',
+    deskripsi: 'Buku Teks Utama Matematika Volume 1 SD Kelas 4 Kurikulum Merdeka.',
+    penulis: 'Tim Gakko Tosho',
+    createdAt: '2025-01-11T09:30:00.000Z'
+  },
+  {
+    id: 'book-sd-5-ipas',
+    judul: 'Ilmu Pengetahuan Alam dan Sosial (IPAS) Kelas V',
+    kelas: 'Kelas 5',
+    kategoriBuku: 'buku_siswa',
+    mapelNama: 'IPAS',
+    fileUrl: 'https://buku.kemdikbud.go.id/catalogue/pdf/ipas-kelas-5-bs.pdf',
+    coverUrl: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=600&q=80',
+    deskripsi: 'Buku Teks Siswa IPAS SD Kelas 5 Kurikulum Merdeka.',
+    penulis: 'Amalia Fitri dkk.',
+    createdAt: '2025-01-12T10:15:00.000Z'
+  },
+  {
+    id: 'book-nonteks-01',
+    judul: 'Literasi Bacaan Anak: Si Kancil dan Pohon Rindang',
+    kelas: 'Semua Kelas',
+    kategoriBuku: 'buku_non_teks',
+    mapelNama: 'Cerita & Literasi',
+    fileUrl: 'https://buku.kemdikbud.go.id/catalogue/pdf/literasi-bacaan-anak.pdf',
+    coverUrl: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
+    deskripsi: 'Buku cerita non-teks pendukung program Gerakan Literasi Sekolah (GLS).',
+    penulis: 'Tim Literasi Kemendikbud',
+    createdAt: '2025-01-13T11:00:00.000Z'
+  },
+  {
+    id: 'book-bg-4-bindo',
+    judul: 'Buku Panduan Guru Bahasa Indonesia Kelas IV',
+    kelas: 'Kelas 4',
+    kategoriBuku: 'buku_guru',
+    mapelNama: 'Bahasa Indonesia',
+    fileUrl: 'https://buku.kemdikbud.go.id/catalogue/pdf/bahasa-indonesia-kelas-4-bg.pdf',
+    coverUrl: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=600&q=80',
+    deskripsi: 'Buku Pegangan Guru Bahasa Indonesia SD Kelas 4 (Privat Guru & Operator).',
+    penulis: 'Eva Y. Nukman & Cicilia Erni Setyowati',
+    createdAt: '2025-01-14T14:20:00.000Z'
+  },
+  {
+    id: 'book-bg-1-mtk',
+    judul: 'Buku Panduan Guru Matematika Kelas I',
+    kelas: 'Kelas 1',
+    kategoriBuku: 'buku_guru',
+    mapelNama: 'Matematika',
+    fileUrl: 'https://buku.kemdikbud.go.id/catalogue/pdf/matematika-kelas-1-bg.pdf',
+    coverUrl: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
+    deskripsi: 'Buku Panduan Guru Matematika SD Kelas 1 Kurikulum Merdeka.',
+    penulis: 'Tim Gakko Tosho',
+    createdAt: '2025-01-15T16:45:00.000Z'
+  }
+];
+
 // Database state initializer (Strictly without dummy data injections)
 const initDatabase = () => {
   if (!localStorage.getItem('profil_sekolah')) {
@@ -89,7 +165,7 @@ const initDatabase = () => {
     localStorage.setItem('notifikasi', '[]');
   }
   if (!localStorage.getItem('buku_digital')) {
-    localStorage.setItem('buku_digital', '[]');
+    localStorage.setItem('buku_digital', JSON.stringify(defaultBukuDigital));
   }
   if (!localStorage.getItem('current_user_role')) {
     localStorage.setItem('current_user_role', 'operator');
@@ -690,7 +766,21 @@ export const db = {
   bukuDigital: {
     getAll: (): BukuDigital[] => {
       const data = localStorage.getItem('buku_digital');
-      return data ? JSON.parse(data) : [];
+      if (!data) {
+        localStorage.setItem('buku_digital', JSON.stringify(defaultBukuDigital));
+        return defaultBukuDigital;
+      }
+      try {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+        // If empty array, seed defaults so books are always available on fresh Vercel deployments
+        localStorage.setItem('buku_digital', JSON.stringify(defaultBukuDigital));
+        return defaultBukuDigital;
+      } catch (e) {
+        return defaultBukuDigital;
+      }
     },
     save: (items: BukuDigital[]) => {
       localStorage.setItem('buku_digital', JSON.stringify(items));
