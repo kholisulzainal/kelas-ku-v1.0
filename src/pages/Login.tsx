@@ -165,13 +165,13 @@ export function Login({ onLoginSuccess }: LoginProps) {
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         {school.logoUrl ? (
           <img
-            className="mx-auto h-20 w-20 sm:h-24 sm:w-24 rounded-[20px] object-cover ring-4 ring-blue-500/15 shadow-md"
+            className="mx-auto h-[100px] w-[100px] sm:h-[120px] sm:w-[120px] rounded-[24px] object-cover ring-4 ring-blue-500/15 shadow-md"
             src={school.logoUrl}
             alt="Logo Sekolah"
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="mx-auto h-20 w-20 sm:h-24 sm:w-24 rounded-[20px] bg-blue-500 flex items-center justify-center text-white text-3xl font-bold shadow-md shadow-blue-500/20">
+          <div className="mx-auto h-[100px] w-[100px] sm:h-[120px] sm:w-[120px] rounded-[24px] bg-blue-500 flex items-center justify-center text-white text-4xl font-bold shadow-md shadow-blue-500/20">
             {school.namaSekolah ? school.namaSekolah.substring(0, 2).toUpperCase() : 'SD'}
           </div>
         )}
