@@ -24,8 +24,6 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [isEnteringScore, setIsEnteringScore] = useState<boolean>(false);
-  const [manualScoreInput, setManualScoreInput] = useState<string>('100');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // 1. Fetch State Pengerjaan Siswa from student_assignments / local DB
@@ -48,25 +46,6 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
     setIsRefreshing(true);
     await fetchStatus();
     setTimeout(() => setIsRefreshing(false), 600);
-  };
-
-  const handleSaveManualScore = async () => {
-    try {
-      setIsSubmitting(true);
-      const parsedNum = parseInt(manualScoreInput, 10);
-      const val = isNaN(parsedNum) ? 100 : Math.min(100, Math.max(0, parsedNum));
-      
-      const updated = await assignmentService.finishAssignment(task.id, studentId, val, 'Nilai diisi secara manual oleh siswa.');
-      setStatus('SELESAI');
-      setScore(updated.score ?? updated.nilai ?? val);
-      setSubmittedAt(updated.submittedAt || new Date().toISOString());
-      setIsEnteringScore(false);
-      if (onStatusUpdated) onStatusUpdated();
-    } catch (err) {
-      console.error('Failed to save manual score:', err);
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   useEffect(() => {
