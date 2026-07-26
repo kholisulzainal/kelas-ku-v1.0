@@ -2,14 +2,11 @@ import { getSupabaseClient } from './supabase';
 
 export const BUCKETS = [
   'logos',
-  'gallery',
   'teachers',
   'students',
   'documents',
-  'news',
   'downloads',
-  'avatars',
-  'ppdb'
+  'avatars'
 ] as const;
 
 export type BucketName = typeof BUCKETS[number] | string;

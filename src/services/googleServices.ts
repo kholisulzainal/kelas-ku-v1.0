@@ -750,12 +750,12 @@ export async function processGoogleFormWebhookSubmission(payload: GoogleFormWebh
     targetMapelId = defaultMapel?.id || 'mapel-1';
   }
 
-  // 3. Create or update Asesmen record
-  const asesmenId = `as-webhook-${Date.now()}-${matchedSiswa.id}`;
+  // 3. Create or update Penilaian record
+  const penilaianId = `as-webhook-${Date.now()}-${matchedSiswa.id}`;
   const activeGuruId = matchedGuru?.id || 'guru-1';
 
-  const newAsesmen = {
-    id: asesmenId,
+  const newPenilaian = {
+    id: penilaianId,
     siswaId: matchedSiswa.id,
     mapelId: targetMapelId,
     tipe: 'harian' as const,
@@ -768,10 +768,10 @@ export async function processGoogleFormWebhookSubmission(payload: GoogleFormWebh
   };
 
   // Local DB upsert
-  db.asesmen.upsert(newAsesmen);
+  db.penilaian.upsert(newPenilaian);
 
   // Sync to Supabase in background
-  syncRowToSupabase('asesmen', newAsesmen).catch(err => {
+  syncRowToSupabase('penilaian', newPenilaian).catch(err => {
     console.warn('[Webhook Sync] Supabase background sync notice:', err);
   });
 
@@ -780,18 +780,19 @@ export async function processGoogleFormWebhookSubmission(payload: GoogleFormWebh
     penerimaRole: 'orang_tua',
     penerimaUserId: `parent-${matchedSiswa.id}`,
     judul: `Nilai Kuis Google Form Masuk Real-Time! (0-Second Delay)`,
-    pesan: `Ananda ${matchedSiswa.namaSiswa} (${matchedSiswa.kelas}) telah menyelesaikan ${newAsesmen.namaPenilaian} dengan skor: ${newAsesmen.nilai}`
+    pesan: `Ananda ${matchedSiswa.namaSiswa} (${matchedSiswa.kelas}) telah menyelesaikan ${newPenilaian.namaPenilaian} dengan skor: ${newPenilaian.nilai}`
   });
 
   // Dispatch global updates instantly (0-second delay)
+  window.dispatchEvent(new Event('penilaians-updated'));
   window.dispatchEvent(new Event('asesmens-updated'));
-  window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+  window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
 
   return {
     success: true,
     studentName: matchedSiswa.namaSiswa,
-    asesmenId: newAsesmen.id,
-    message: `Nilai ${newAsesmen.nilai} untuk siswa ${matchedSiswa.namaSiswa} (${matchedSiswa.kelas}) berhasil dimasukkan ke Data Nilai Harian secara Real-Time (0-Second Delay)!`
+    asesmenId: newPenilaian.id,
+    message: `Nilai ${newPenilaian.nilai} untuk siswa ${matchedSiswa.namaSiswa} (${matchedSiswa.kelas}) berhasil dimasukkan ke Data Penilaian Harian secara Real-Time (0-Second Delay)!`
   };
 }
 

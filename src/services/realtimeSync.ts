@@ -10,7 +10,8 @@ const TABLES_CONFIG = [
   { dbName: 'absensi', localName: 'absensi', isArray: true },
   { dbName: 'daftar_tugas', localName: 'daftar_tugas', isArray: true },
   { dbName: 'tugas_siswa', localName: 'tugas_siswa', isArray: true },
-  { dbName: 'asesmen', localName: 'asesmen', isArray: true },
+  { dbName: 'penilaian', localName: 'penilaian', isArray: true },
+  { dbName: 'asesmen', localName: 'penilaian', isArray: true },
   { dbName: 'temuan_khusus', localName: 'temuan_khusus', isArray: true },
   { dbName: 'notifikasi', localName: 'notifikasi', isArray: true }
 ];

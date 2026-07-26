@@ -8,6 +8,8 @@ import {
   Absensi,
   DaftarTugas,
   TugasSiswa,
+  Penilaian,
+  TipePenilaian,
   Asesmen,
   TemuanKhusus,
   Notifikasi,
@@ -155,8 +157,8 @@ const initDatabase = () => {
   if (!localStorage.getItem('tugas_siswa')) {
     localStorage.setItem('tugas_siswa', '[]');
   }
-  if (!localStorage.getItem('asesmen')) {
-    localStorage.setItem('asesmen', '[]');
+  if (!localStorage.getItem('penilaian')) {
+    localStorage.setItem('penilaian', '[]');
   }
   if (!localStorage.getItem('temuan_khusus')) {
     localStorage.setItem('temuan_khusus', '[]');
@@ -192,6 +194,7 @@ export const db = {
     localStorage.removeItem('absensi');
     localStorage.removeItem('daftar_tugas');
     localStorage.removeItem('tugas_siswa');
+    localStorage.removeItem('penilaian');
     localStorage.removeItem('asesmen');
     localStorage.removeItem('temuan_khusus');
     localStorage.removeItem('notifikasi');
@@ -629,9 +632,9 @@ export const db = {
       db.tugasSiswa.save(list);
       syncRowToSupabase('tugas_siswa', submitted);
 
-      // Save into formal Asesmen (harian) as well if score exists!
+      // Save into formal Penilaian (harian) as well if score exists!
       if (task && finalScore != null) {
-        db.asesmen.upsert({
+        db.penilaian.upsert({
           id: `as-auto-${tugasId}-${siswaId}`,
           siswaId,
           mapelId: task.mapelId,
@@ -658,39 +661,89 @@ export const db = {
 
       // Fire global update events to sync across all dashboards
       window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'tugas_siswa' } }));
-      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
+      window.dispatchEvent(new Event('penilaians-updated'));
     }
   },
 
-  // 10. Asesmen Kurikulum Merdeka
-  asesmen: {
-    getAll: (): Asesmen[] => {
-      const data = localStorage.getItem('asesmen');
-      return data ? JSON.parse(data) : [];
+  // 10. Penilaian (d/h Asesmen)
+  penilaian: {
+    getAll: (): Penilaian[] => {
+      const data = localStorage.getItem('penilaian') || localStorage.getItem('asesmen');
+      let list: Penilaian[] = data ? JSON.parse(data) : [];
+
+      // Auto-merge scored submissions from tugas_siswa if missing
+      try {
+        const tsData = localStorage.getItem('tugas_siswa');
+        if (tsData) {
+          const tugasSiswaList: TugasSiswa[] = JSON.parse(tsData);
+          const daftarTugasList: DaftarTugas[] = db.daftarTugas.getAll();
+          const siswaList: Siswa[] = db.siswa.getAll();
+
+          for (const ts of tugasSiswaList) {
+            const scoreVal = ts.score ?? ts.nilai;
+            if (scoreVal != null) {
+              const autoId = `as-${ts.tugasId}-${ts.siswaId}`;
+              const exists = list.some(p => p.id === autoId || (p.siswaId === ts.siswaId && p.namaPenilaian.includes(ts.tugasId)));
+              if (!exists) {
+                const task = daftarTugasList.find(t => t.id === ts.tugasId);
+                const student = siswaList.find(s => s.id === ts.siswaId);
+                list.push({
+                  id: autoId,
+                  siswaId: ts.siswaId,
+                  mapelId: task?.mapelId || 'mapel-1',
+                  tipe: 'harian',
+                  namaPenilaian: task?.judulTugas || 'Kuis Google Form',
+                  nilai: scoreVal,
+                  deskripsiKompetensi: `Nilai dari pengerjaan tugas ${task?.judulTugas || ''}`,
+                  tanggalPenilaian: ts.tanggalDikerjakan || new Date().toISOString().split('T')[0],
+                  dinilaiOlehId: task?.dibuatOlehId || 'guru-1',
+                  kelas: student?.kelas || task?.kelas || 'Kelas 4-A'
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error computing automatic Penilaian from tugasSiswa:', err);
+      }
+
+      return list;
     },
-    save: (items: Asesmen[]) => {
+    save: (items: Penilaian[]) => {
+      localStorage.setItem('penilaian', JSON.stringify(items));
       localStorage.setItem('asesmen', JSON.stringify(items));
-      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
+      window.dispatchEvent(new Event('penilaians-updated'));
+      window.dispatchEvent(new Event('asesmens-updated'));
     },
-    upsert: (item: Asesmen) => {
-      const list = db.asesmen.getAll();
-      const finalItem = { ...item, id: item.id || `as-${Date.now()}` };
+    upsert: (item: Penilaian) => {
+      const list = db.penilaian.getAll();
+      const finalItem = { ...item, id: item.id || `pnl-${Date.now()}` };
       const idx = list.findIndex(a => a.id === finalItem.id);
       if (idx > -1) {
         list[idx] = finalItem;
       } else {
         list.push(finalItem);
       }
-      db.asesmen.save(list);
-      syncRowToSupabase('asesmen', finalItem);
-      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+      db.penilaian.save(list);
+      syncRowToSupabase('penilaian', finalItem);
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
+      window.dispatchEvent(new Event('penilaians-updated'));
+      window.dispatchEvent(new Event('asesmens-updated'));
     },
     delete: (id: string) => {
-      const list = db.asesmen.getAll().filter(a => a.id !== id);
-      db.asesmen.save(list);
-      deleteRowFromSupabase('asesmen', id);
-      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+      const list = db.penilaian.getAll().filter(a => a.id !== id);
+      db.penilaian.save(list);
+      deleteRowFromSupabase('penilaian', id);
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
+      window.dispatchEvent(new Event('penilaians-updated'));
+      window.dispatchEvent(new Event('asesmens-updated'));
     }
+  },
+
+  get asesmen() {
+    return this.penilaian;
   },
 
   // 11. Temuan Khusus

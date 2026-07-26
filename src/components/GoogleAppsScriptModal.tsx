@@ -27,81 +27,22 @@ export const GoogleAppsScriptModal: React.FC<GoogleAppsScriptModalProps> = ({
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
 
   const sqlMigrationCode = `-- =========================================================================
--- SQL MIGRASI SINKRONISASI SUPABASE (EMAIL & ID SISWA UNTUK GOOGLE FORM WEBHOOK)
--- Jalankan Kueri SQL ini di SQL Editor Dashboard Supabase Anda
+-- SQL MIGRASI & REFACTOR LENGKAP SUPABASE (VERSI TERBARU APLIKASI)
+-- Jalankan skrip ini di SQL Editor Dashboard Supabase Anda
 -- =========================================================================
 
--- 1. Buat Tabel public.siswa jika belum ada
-CREATE TABLE IF NOT EXISTS public.siswa (
-  id text PRIMARY KEY,
-  nama_siswa text,
-  email text,
-  nisn text,
-  nis text,
-  kelas text,
-  password text,
-  created_at timestamptz DEFAULT now()
-);
+-- 1. HAPUS TABEL-TABEL LAMA / DEPRECATED YANG TIDAK DIGUNAKAN LAGI
+DROP TABLE IF EXISTS public.student_assignments CASCADE;
+DROP TABLE IF EXISTS public.assignments CASCADE;
+DROP TABLE IF EXISTS public.ppdb CASCADE;
+DROP TABLE IF EXISTS public.news CASCADE;
+DROP TABLE IF EXISTS public.gallery CASCADE;
+DROP TABLE IF EXISTS public.profiles CASCADE;
 
--- 2. Buat Tabel public.tugas_siswa jika belum ada
-CREATE TABLE IF NOT EXISTS public.tugas_siswa (
-  id text PRIMARY KEY,
-  tugas_id text,
-  siswa_id text,
-  status_pengerjaan boolean DEFAULT false,
-  status text DEFAULT 'BELUM_DIKERJAKAN',
-  score numeric,
-  nilai numeric,
-  submitted_at timestamptz,
-  tanggal_dikerjakan text,
-  umpan_balik text,
-  created_at timestamptz DEFAULT now()
-);
-
--- 3. Buat Tabel public.student_assignments jika belum ada
-CREATE TABLE IF NOT EXISTS public.student_assignments (
-  id text PRIMARY KEY,
-  assignment_id text,
-  student_id text,
-  status text DEFAULT 'BELUM_DIKERJAKAN',
-  score numeric,
-  submitted_at timestamptz,
-  created_at timestamptz DEFAULT now()
-);
-
--- 4. Buat Tabel public.profiles jika belum ada
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id text PRIMARY KEY,
-  full_name text,
-  email text,
-  username text,
-  role text,
-  created_at timestamptz DEFAULT now()
-);
-
--- 5. Tambahkan kolom pendukung (jika tabel sudah ada sebelumnya)
-ALTER TABLE public.siswa 
-ADD COLUMN IF NOT EXISTS email text,
-ADD COLUMN IF NOT EXISTS nisn text,
-ADD COLUMN IF NOT EXISTS nis text,
-ADD COLUMN IF NOT EXISTS password text;
-
-ALTER TABLE public.tugas_siswa
-ADD COLUMN IF NOT EXISTS score numeric,
-ADD COLUMN IF NOT EXISTS nilai numeric,
-ADD COLUMN IF NOT EXISTS status text DEFAULT 'BELUM_DIKERJAKAN',
-ADD COLUMN IF NOT EXISTS submitted_at timestamptz,
-ADD COLUMN IF NOT EXISTS tanggal_dikerjakan text,
-ADD COLUMN IF NOT EXISTS umpan_balik text;
-
-ALTER TABLE public.student_assignments
-ADD COLUMN IF NOT EXISTS score numeric,
-ADD COLUMN IF NOT EXISTS status text DEFAULT 'BELUM_DIKERJAKAN',
-ADD COLUMN IF NOT EXISTS submitted_at timestamptz;
-
--- 6. Buat Tabel public.asesmen (Nilai Penilaian & Transkrip) jika belum ada
-CREATE TABLE IF NOT EXISTS public.asesmen (
-  id text PRIMARY KEY,
+-- 2. DOKUMENTASI / MIGRASI DATA TABEL ASESMEN KE PENILAIAN
+-- Buat Tabel public.penilaian (Tabel Penilaian Utama)
+CREATE TABLE IF NOT EXISTS public.penilaian (
+  id text PRIMARY KEY DEFAULT ('pnl-' || extract(epoch from now())::bigint),
   siswa_id text NOT NULL,
   mapel_id text,
   tipe text DEFAULT 'harian',
@@ -114,25 +55,100 @@ CREATE TABLE IF NOT EXISTS public.asesmen (
   created_at timestamptz DEFAULT now()
 );
 
--- 7. Buat Index Pencarian Email Cepat
-CREATE INDEX IF NOT EXISTS idx_siswa_email ON public.siswa (lower(email));
+-- Jika tabel asesmen sebelumnya ada dalam bentuk TABEL FISIK, migrasikan datanya ke penilaian lalu ubah asesmen menjadi VIEW
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT FROM information_schema.tables 
+    WHERE table_schema = 'public' 
+    AND table_name = 'asesmen' 
+    AND table_type = 'BASE TABLE'
+  ) THEN
+    INSERT INTO public.penilaian (id, siswa_id, mapel_id, tipe, nama_penilaian, nilai, deskripsi_kompetensi, tanggal_penilaian, dinilai_oleh_id, kelas)
+    SELECT id, siswa_id, mapel_id, COALESCE(tipe, 'harian'), COALESCE(nama_penilaian, 'Penilaian'), COALESCE(nilai, 0), deskripsi_kompetensi, tanggal_penilaian, dinilai_oleh_id, kelas
+    FROM public.asesmen
+    ON CONFLICT (id) DO NOTHING;
+    
+    DROP TABLE public.asesmen CASCADE;
+  END IF;
+END $$;
 
--- 8. Kebijakan Keamanan RLS (Row Level Security)
-ALTER TABLE public.siswa ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public read-write for siswa" ON public.siswa;
-CREATE POLICY "Allow public read-write for siswa" ON public.siswa FOR ALL USING (true) WITH CHECK (true);
+-- Buat VIEW public.asesmen agar backward compatible apabila ada request legacy
+CREATE OR REPLACE VIEW public.asesmen AS
+SELECT * FROM public.penilaian;
 
-ALTER TABLE public.tugas_siswa ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public read-write for tugas_siswa" ON public.tugas_siswa;
-CREATE POLICY "Allow public read-write for tugas_siswa" ON public.tugas_siswa FOR ALL USING (true) WITH CHECK (true);
+-- 3. BUAT ATAU DIPERBARUI TABEL public.tugas_siswa (Tabel Kanonikal Tugas & Skor)
+CREATE TABLE IF NOT EXISTS public.tugas_siswa (
+  id text PRIMARY KEY DEFAULT ('ts-' || extract(epoch from now())::bigint),
+  tugas_id text NOT NULL,
+  siswa_id text NOT NULL,
+  status_pengerjaan boolean DEFAULT false,
+  status text DEFAULT 'BELUM_DIKERJAKAN',
+  score numeric,
+  nilai numeric,
+  started_at timestamptz,
+  submitted_at timestamptz,
+  tanggal_dikerjakan text,
+  umpan_balik text,
+  created_at timestamptz DEFAULT now(),
+  CONSTRAINT unique_tugas_siswa UNIQUE (tugas_id, siswa_id)
+);
 
-ALTER TABLE public.student_assignments ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public read-write for student_assignments" ON public.student_assignments;
-CREATE POLICY "Allow public read-write for student_assignments" ON public.student_assignments FOR ALL USING (true) WITH CHECK (true);
+-- Tambahkan kolom jika tabel tugas_siswa sudah ada sebelumnya
+ALTER TABLE public.tugas_siswa
+ADD COLUMN IF NOT EXISTS status_pengerjaan boolean DEFAULT false,
+ADD COLUMN IF NOT EXISTS status text DEFAULT 'BELUM_DIKERJAKAN',
+ADD COLUMN IF NOT EXISTS score numeric,
+ADD COLUMN IF NOT EXISTS nilai numeric,
+ADD COLUMN IF NOT EXISTS started_at timestamptz,
+ADD COLUMN IF NOT EXISTS submitted_at timestamptz,
+ADD COLUMN IF NOT EXISTS tanggal_dikerjakan text,
+ADD COLUMN IF NOT EXISTS umpan_balik text;
 
-ALTER TABLE public.asesmen ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public read-write for asesmen" ON public.asesmen;
-CREATE POLICY "Allow public read-write for asesmen" ON public.asesmen FOR ALL USING (true) WITH CHECK (true);
+-- 4. BUAT ATAU DIPERBARUI TABEL public.siswa
+CREATE TABLE IF NOT EXISTS public.siswa (
+  id text PRIMARY KEY DEFAULT ('siswa-' || extract(epoch from now())::bigint),
+  nama_siswa text NOT NULL,
+  email text,
+  nisn text,
+  nis text,
+  kelas text DEFAULT 'Kelas 4-A',
+  alamat text,
+  foto_url text,
+  nama_ayah text,
+  nama_ibu text,
+  no_telepon_ortu text,
+  password text DEFAULT 'siswa123',
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.siswa 
+ADD COLUMN IF NOT EXISTS email text,
+ADD COLUMN IF NOT EXISTS nisn text,
+ADD COLUMN IF NOT EXISTS nis text,
+ADD COLUMN IF NOT EXISTS password text DEFAULT 'siswa123';
+
+-- 5. KONTROL KEBIJAKAN RLS (Row Level Security - Akses Publik Read/Write)
+DO $$
+DECLARE
+  tbl text;
+BEGIN
+  FOR tbl IN SELECT unnest(ARRAY[
+    'profil_sekolah', 'guru', 'data_kelas', 'siswa', 'orang_tua',
+    'mata_pelajaran', 'jadwal_pelajaran', 'absensi', 'daftar_tugas', 
+    'tugas_siswa', 'penilaian', 'temuan_khusus', 'notifikasi', 
+    'application_settings', 'buku_digital'
+  ])
+  LOOP
+    IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
+      EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tbl);
+      EXECUTE format('DROP POLICY IF EXISTS "Allow public read-write" ON public.%I', tbl);
+      EXECUTE format('CREATE POLICY "Allow public read-write" ON public.%I FOR ALL USING (true) WITH CHECK (true)', tbl);
+    END IF;
+  END LOOP;
+END $$;
+
+NOTIFY pgrst, 'reload schema';
 `;
 
   const handleCopySql = () => {
@@ -167,15 +183,34 @@ function onFormSubmit(e) {
         studentEmail = e.response.getRespondentEmail() || "";
       }
       
-      // Jika email terverifikasi kosong, cari dari jawaban item bertema "email"
-      if (!studentEmail && typeof e.response.getItemResponses === "function") {
+      // Jika email terverifikasi kosong, cari dari jawaban item (Email, NISN, NIS, Nama, dll)
+      if (typeof e.response.getItemResponses === "function") {
         var itemResponses = e.response.getItemResponses();
+        var firstAnswer = "";
+
         for (var i = 0; i < itemResponses.length; i++) {
           var itemTitle = itemResponses[i].getItem().getTitle().toLowerCase();
-          if (itemTitle.indexOf("email") !== -1 || itemTitle.indexOf("surel") !== -1) {
-            studentEmail = itemResponses[i].getResponse();
+          var respVal = String(itemResponses[i].getResponse() || "").trim();
+
+          if (!firstAnswer && respVal) {
+            firstAnswer = respVal;
+          }
+
+          if (itemTitle.indexOf("email") !== -1 || itemTitle.indexOf("surel") !== -1 || itemTitle.indexOf("alamat") !== -1) {
+            studentEmail = respVal;
             break;
           }
+          if (!studentEmail && (itemTitle.indexOf("nisn") !== -1 || itemTitle.indexOf("nis") !== -1 || itemTitle.indexOf("no. induk") !== -1 || itemTitle.indexOf("id") !== -1)) {
+            studentEmail = respVal;
+          }
+          if (!studentEmail && (itemTitle.indexOf("nama") !== -1 || itemTitle.indexOf("siswa") !== -1 || itemTitle.indexOf("lengkap") !== -1 || itemTitle.indexOf("peserta") !== -1)) {
+            studentEmail = respVal;
+          }
+        }
+
+        // Fallback jika tidak ada judul khusus yang cocok: gunakan isian pertama
+        if (!studentEmail && firstAnswer) {
+          studentEmail = firstAnswer;
         }
       }
 
@@ -183,10 +218,17 @@ function onFormSubmit(e) {
       if (typeof e.response.getGradableItemResponses === "function") {
         var gradables = e.response.getGradableItemResponses();
         var totalScore = 0;
+        var hasScores = false;
         for (var j = 0; j < gradables.length; j++) {
-          totalScore += gradables[j].getScore() || 0;
+          var sc = gradables[j].getScore();
+          if (sc !== null && sc !== undefined) {
+            totalScore += sc;
+            hasScores = true;
+          }
         }
-        scoreText = String(totalScore);
+        if (hasScores) {
+          scoreText = String(totalScore);
+        }
       }
     }
 
@@ -194,19 +236,28 @@ function onFormSubmit(e) {
     // TEKNIK 2: Event Google Sheets (e.namedValues / e.values dari SpreadsheetApp)
     // =========================================================================
     if (!studentEmail && e && e.namedValues) {
-      // Cari Email dari e.namedValues (Object nama kolom Google Sheets)
+      var firstSheetVal = "";
       for (var key in e.namedValues) {
         var lowerKey = key.toLowerCase();
+        var valArr = e.namedValues[key];
+        var valStr = (valArr && valArr.length > 0 && valArr[0]) ? String(valArr[0]).trim() : "";
+
+        if (!firstSheetVal && valStr && lowerKey.indexOf("timestamp") === -1 && lowerKey.indexOf("waktu") === -1) {
+          firstSheetVal = valStr;
+        }
+
         if (lowerKey.indexOf("email") !== -1 || lowerKey.indexOf("surel") !== -1 || lowerKey.indexOf("alamat") !== -1) {
-          var valArr = e.namedValues[key];
-          if (valArr && valArr.length > 0 && valArr[0]) {
-            studentEmail = String(valArr[0]).trim();
-            break;
-          }
+          if (valStr) { studentEmail = valStr; break; }
+        } else if (lowerKey.indexOf("nisn") !== -1 || lowerKey.indexOf("nis") !== -1) {
+          if (valStr && !studentEmail) studentEmail = valStr;
+        } else if (lowerKey.indexOf("nama") !== -1 || lowerKey.indexOf("siswa") !== -1) {
+          if (valStr && !studentEmail) studentEmail = valStr;
         }
       }
+      if (!studentEmail && firstSheetVal) {
+        studentEmail = firstSheetVal;
+      }
 
-      // Cari Skor dari e.namedValues
       if (!scoreText || scoreText === "0") {
         for (var keyScore in e.namedValues) {
           var lowerKeyScore = keyScore.toLowerCase();
@@ -221,14 +272,15 @@ function onFormSubmit(e) {
       }
     }
 
-    // Backup dari e.values (Array kolom mentah Google Sheets)
     if (e && e.values && e.values.length > 0) {
       if (!studentEmail) {
         for (var v = 0; v < e.values.length; v++) {
           var val = String(e.values[v]).trim();
-          if (val.indexOf("@") !== -1 && val.indexOf(".") !== -1) {
-            studentEmail = val;
-            break;
+          if (val && v > 0 && val.indexOf(":") === -1) {
+            if (val.indexOf("@") !== -1 || !isNaN(parseFloat(val)) || val.length > 2) {
+              studentEmail = val;
+              break;
+            }
           }
         }
       }
@@ -245,25 +297,31 @@ function onFormSubmit(e) {
     }
 
     // =========================================================================
-    // TEKNIK 3: Fallback Membaca Baris Terakhir Google Sheets
+    // TEKNIK 3: Fallback Membaca Baris Terakhir Google Sheets (Aman jika SpreadsheetApp null)
     // =========================================================================
     if (!studentEmail || !scoreText) {
       try {
-        var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-        var lastRow = sheet.getLastRow();
-        if (lastRow > 1) {
-          var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-          var rowData = sheet.getRange(lastRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+        var activeSS = null;
+        if (typeof SpreadsheetApp !== "undefined") {
+          activeSS = SpreadsheetApp.getActiveSpreadsheet();
+        }
+        if (activeSS) {
+          var sheet = activeSS.getActiveSheet();
+          var lastRow = sheet.getLastRow();
+          if (lastRow > 1) {
+            var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+            var rowData = sheet.getRange(lastRow, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-          for (var col = 0; col < headers.length; col++) {
-            var h = String(headers[col]).toLowerCase();
-            var d = String(rowData[col]).trim();
+            for (var col = 0; col < headers.length; col++) {
+              var h = String(headers[col]).toLowerCase();
+              var d = String(rowData[col]).trim();
 
-            if (!studentEmail && (h.indexOf("email") !== -1 || d.indexOf("@") !== -1)) {
-              studentEmail = d;
-            }
-            if (!scoreText && (h.indexOf("skor") !== -1 || h.indexOf("score") !== -1 || h.indexOf("nilai") !== -1)) {
-              scoreText = d;
+              if (!studentEmail && (h.indexOf("email") !== -1 || h.indexOf("nama") !== -1 || h.indexOf("nisn") !== -1 || d.indexOf("@") !== -1)) {
+                studentEmail = d;
+              }
+              if (!scoreText && (h.indexOf("skor") !== -1 || h.indexOf("score") !== -1 || h.indexOf("nilai") !== -1)) {
+                scoreText = d;
+              }
             }
           }
         }

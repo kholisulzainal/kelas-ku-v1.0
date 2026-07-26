@@ -21,11 +21,13 @@ function parseScoreText(scoreText: any): number {
 }
 
 // Get Supabase Admin / Service Client or Fallback
-function getAdminSupabaseClient() {
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || 
+function getAdminSupabaseClient(customUrl?: string, customKey?: string) {
+  const supabaseUrl = customUrl || 
+                      process.env.VITE_SUPABASE_URL || 
                       process.env.NEXT_PUBLIC_SUPABASE_URL || 
                       'https://bznfilozrqhmnjvptqic.supabase.co';
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
+  const serviceKey = customKey || 
+                     process.env.SUPABASE_SERVICE_ROLE_KEY || 
                      process.env.VITE_SUPABASE_ANON_KEY || 
                      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
                      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6bmZpbG96cnFobW5qdnB0cWljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMDc4ODAsImV4cCI6MjA5OTg4Mzg4MH0.utqOLbyIp4UJN2zUKwJpoPEw7EJglUxz-iUTD-Cghds';
@@ -97,47 +99,37 @@ async function startServer() {
       const cleanEmail = String(student_email).trim().toLowerCase();
       const cleanAssignmentId = String(assignment_id).trim();
 
-      const supabase = getAdminSupabaseClient();
+      const customUrl = req.body?.supabase_url || (req.headers['x-supabase-url'] as string);
+      const customKey = req.body?.supabase_key || (req.headers['x-supabase-key'] as string);
+      const supabase = getAdminSupabaseClient(customUrl, customKey);
       let studentId: string | null = null;
       let studentName: string | null = null;
 
-      // C. Cari ID Siswa di tabel profiles atau siswa berdasarkan student_email (case-insensitive)
+      // C. Cari ID Siswa di tabel `siswa` berdasarkan student_email (case-insensitive)
       const emailPrefix = cleanEmail.split('@')[0];
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, username')
-        .or(`email.ilike.${cleanEmail},username.ilike.${cleanEmail},username.ilike.${emailPrefix},id.eq.${emailPrefix}`)
+      const { data: siswaData } = await supabase
+        .from('siswa')
+        .select('id, nama_siswa, email, nisn, nis')
+        .or(`email.ilike.${cleanEmail},id.eq.${cleanEmail},id.eq.${emailPrefix},nisn.eq.${emailPrefix}`)
         .maybeSingle();
 
-      if (profileData && profileData.id) {
-        studentId = profileData.id;
-        studentName = profileData.full_name || profileData.username || null;
+      if (siswaData && siswaData.id) {
+        studentId = siswaData.id;
+        studentName = siswaData.nama_siswa || null;
       } else {
-        // Fallback: Cari di tabel `siswa`
-        const { data: siswaData } = await supabase
-          .from('siswa')
-          .select('id, nama_siswa, email, nisn, nis')
-          .or(`email.ilike.${cleanEmail},id.eq.${cleanEmail},id.eq.${emailPrefix},nisn.eq.${emailPrefix}`)
-          .maybeSingle();
-
-        if (siswaData && siswaData.id) {
-          studentId = siswaData.id;
-          studentName = siswaData.nama_siswa || null;
-        } else {
-          // Extra search: check all rows in siswa table for name or partial match
-          const { data: allSiswa } = await supabase.from('siswa').select('id, nama_siswa, email, nisn');
-          if (allSiswa && allSiswa.length > 0) {
-            const matched = allSiswa.find(s => 
-              (s.email && s.email.toLowerCase() === cleanEmail) ||
-              (s.id && (s.id.toLowerCase() === cleanEmail || s.id.toLowerCase() === emailPrefix)) ||
-              (s.nisn && s.nisn === emailPrefix) ||
-              (s.nama_siswa && s.nama_siswa.toLowerCase().includes(emailPrefix))
-            );
-            if (matched) {
-              studentId = matched.id;
-              studentName = matched.nama_siswa;
-            }
+        // Extra search: check all rows in siswa table for name or partial match
+        const { data: allSiswa } = await supabase.from('siswa').select('id, nama_siswa, email, nisn');
+        if (allSiswa && allSiswa.length > 0) {
+          const matched = allSiswa.find(s => 
+            (s.email && s.email.toLowerCase() === cleanEmail) ||
+            (s.id && (s.id.toLowerCase() === cleanEmail || s.id.toLowerCase() === emailPrefix)) ||
+            (s.nisn && s.nisn === emailPrefix) ||
+            (s.nama_siswa && s.nama_siswa.toLowerCase().includes(emailPrefix))
+          );
+          if (matched) {
+            studentId = matched.id;
+            studentName = matched.nama_siswa;
           }
         }
       }
@@ -205,31 +197,7 @@ async function startServer() {
       const targetStudentIds = Array.from(new Set([studentId, emailPrefix, cleanEmail].filter(Boolean)));
 
       for (const targetId of targetStudentIds) {
-        // E. UPSERT ke tabel `student_assignments`
-        let { error: saError } = await supabase
-          .from('student_assignments')
-          .upsert({
-            id: `sa-${cleanAssignmentId}-${targetId}`,
-            assignment_id: cleanAssignmentId,
-            student_id: targetId,
-            status: 'SELESAI',
-            score: parsedScore,
-            submitted_at: nowIso
-          }, { onConflict: 'id' });
-
-        if (saError) {
-          await supabase
-            .from('student_assignments')
-            .upsert({
-              assignment_id: cleanAssignmentId,
-              student_id: targetId,
-              status: 'SELESAI',
-              score: parsedScore,
-              submitted_at: nowIso
-            });
-        }
-
-        // F. UPSERT ke tabel `tugas_siswa`
+        // E. UPSERT ke tabel `tugas_siswa` (Kanonikal Utama)
         let { error: tsError } = await supabase
           .from('tugas_siswa')
           .upsert({
@@ -246,6 +214,7 @@ async function startServer() {
           }, { onConflict: 'id' });
 
         if (tsError) {
+          console.warn('[Webhook Google Form] tugas_siswa primary upsert notice:', tsError.message);
           await supabase
             .from('tugas_siswa')
             .upsert({
@@ -261,9 +230,9 @@ async function startServer() {
             });
         }
 
-        // G. UPSERT ke tabel `asesmen` (Halaman Penilaian & Matrix Nilai)
-        let { error: asmError } = await supabase
-          .from('asesmen')
+        // F. UPSERT ke tabel `penilaian` (Halaman Penilaian & Matrix Nilai)
+        let { error: pnlError } = await supabase
+          .from('penilaian')
           .upsert({
             id: `as-${cleanAssignmentId}-${targetId}`,
             siswa_id: targetId,
@@ -277,10 +246,13 @@ async function startServer() {
             kelas: taskKelas || studentClass
           }, { onConflict: 'id' });
 
-        if (asmError) {
+        if (pnlError) {
+          console.warn('[Webhook Google Form] penilaian primary upsert notice:', pnlError.message);
+          // Try fallback upsert to legacy asesmen if penilaian table doesn't exist yet
           await supabase
             .from('asesmen')
             .upsert({
+              id: `as-${cleanAssignmentId}-${targetId}`,
               siswa_id: targetId,
               mapel_id: mapelId,
               tipe: 'harian',
@@ -290,7 +262,7 @@ async function startServer() {
               tanggal_penilaian: todayStr,
               dinilai_oleh_id: dibuatOlehId,
               kelas: taskKelas || studentClass
-            });
+            }).catch(() => {});
         }
       }
 

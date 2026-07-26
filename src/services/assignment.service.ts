@@ -89,28 +89,9 @@ export const assignmentService = {
       new Set([studentId, studentEmail, emailPrefix].filter(Boolean) as string[])
     );
 
-    // 1. Check Supabase table `student_assignments` first if client connected
+    // 1. Check canonical table `tugas_siswa` in Supabase FIRST
     if (client) {
       try {
-        const { data, error } = await client
-          .from('student_assignments')
-          .select('*')
-          .eq('assignment_id', assignmentId)
-          .in('student_id', targetIds)
-          .order('submitted_at', { ascending: false })
-          .limit(1);
-
-        if (!error && data && data.length > 0) {
-          const row = data[0];
-          return {
-            status: (row.status as AssignmentStatus) || 'BELUM_DIKERJAKAN',
-            score: row.score != null ? Number(row.score) : null,
-            startedAt: row.started_at || null,
-            submittedAt: row.submitted_at || null
-          };
-        }
-
-        // Also check `tugas_siswa` in Supabase
         const { data: tsData, error: tsError } = await client
           .from('tugas_siswa')
           .select('*')
@@ -121,15 +102,53 @@ export const assignmentService = {
 
         if (!tsError && tsData && tsData.length > 0) {
           const tsRow = tsData[0];
+          const parsedScore = tsRow.score ?? tsRow.nilai ?? null;
+
+          const localSub: TugasSiswa = {
+            id: tsRow.id || `ts-${assignmentId}-${studentId}`,
+            tugasId: assignmentId,
+            siswaId: studentId,
+            statusPengerjaan: Boolean(tsRow.status_pengerjaan || tsRow.status === 'SELESAI'),
+            status: (tsRow.status as AssignmentStatus) || (tsRow.status_pengerjaan ? 'SELESAI' : 'BELUM_DIKERJAKAN'),
+            startedAt: tsRow.started_at || null,
+            submittedAt: tsRow.submitted_at || null,
+            tanggalDikerjakan: tsRow.tanggal_dikerjakan || '',
+            nilai: parsedScore ?? undefined,
+            score: parsedScore,
+            umpanBalik: tsRow.umpan_balik || ''
+          };
+
+          db.tugasSiswa.upsert(localSub);
+
+          if (parsedScore != null) {
+            const task = db.daftarTugas.getAll().find(t => t.id === assignmentId);
+            const student = db.siswa.getAll().find(s => s.id === studentId);
+            db.penilaian.upsert({
+              id: `as-${assignmentId}-${studentId}`,
+              siswaId: studentId,
+              mapelId: task?.mapelId || 'mapel-1',
+              tipe: 'harian',
+              namaPenilaian: task?.judulTugas || 'Kuis Google Form',
+              nilai: parsedScore,
+              deskripsiKompetensi: `Nilai kuis Google Form disinkronkan dari server`,
+              tanggalPenilaian: tsRow.tanggal_dikerjakan || new Date().toISOString().split('T')[0],
+              dinilaiOlehId: task?.dibuatOlehId || 'guru-1',
+              kelas: student?.kelas || task?.kelas || 'Kelas 4-A'
+            });
+            window.dispatchEvent(new Event('penilaians-updated'));
+            window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
+          }
+
           return {
             status: (tsRow.status as AssignmentStatus) || (tsRow.status_pengerjaan ? 'SELESAI' : 'BELUM_DIKERJAKAN'),
-            score: tsRow.score ?? tsRow.nilai ?? null,
+            score: parsedScore,
             startedAt: tsRow.started_at || null,
-            submittedAt: tsRow.submitted_at || null
+            submittedAt: tsRow.submitted_at || null,
+            submission: localSub
           };
         }
       } catch (err) {
-        console.warn('[Assignment Service] student_assignments fetch warning:', err);
+        console.warn('[Assignment Service] tugas_siswa check notice:', err);
       }
     }
 
@@ -167,24 +186,8 @@ export const assignmentService = {
 
     db.tugasSiswa.upsert(sub);
 
-    // 2. Sync to Supabase `student_assignments` & `tugas_siswa`
-    const client = getSupabaseClient();
-    if (client) {
-      try {
-        // Upsert to `student_assignments`
-        await client.from('student_assignments').upsert({
-          assignment_id: assignmentId,
-          student_id: studentId,
-          status: 'SEDANG_MENGERJAKAN',
-          started_at: sub.startedAt
-        }, { onConflict: 'assignment_id,student_id' });
-
-        // Also sync to `tugas_siswa` for backward compatibility
-        await syncRowToSupabase('tugas_siswa', sub, true);
-      } catch (err) {
-        console.warn('[Assignment Service] Error starting assignment in Supabase:', err);
-      }
-    }
+    // 2. Sync to Supabase `tugas_siswa`
+    await syncRowToSupabase('tugas_siswa', sub, true).catch(e => console.warn(e));
 
     return sub;
   },
@@ -211,12 +214,12 @@ export const assignmentService = {
 
     db.tugasSiswa.upsert(sub);
 
-    // Sync to `asesmen` table so grade immediately appears in Penilaian / Asesmen Matrix
+    // Sync to `penilaian` table so grade immediately appears in Penilaian Matrix
     if (finalScore != null) {
       const task = db.daftarTugas.getAll().find(t => t.id === assignmentId);
       const student = db.siswa.getAll().find(s => s.id === studentId);
 
-      const asmItem = {
+      const pnlItem = {
         id: `as-${assignmentId}-${studentId}`,
         siswaId: studentId,
         mapelId: task?.mapelId || 'mapel-1',
@@ -229,28 +232,14 @@ export const assignmentService = {
         kelas: student?.kelas || task?.kelas || 'Kelas 4-A'
       };
 
-      db.asesmen.upsert(asmItem);
-      syncRowToSupabase('asesmen', asmItem, true).catch(err => console.warn(err));
-      window.dispatchEvent(new Event('asesmens-updated'));
-      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+      db.penilaian.upsert(pnlItem);
+      syncRowToSupabase('penilaian', pnlItem, true).catch(err => console.warn(err));
+      window.dispatchEvent(new Event('penilaians-updated'));
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
     }
 
-    const client = getSupabaseClient();
-    if (client) {
-      try {
-        await client.from('student_assignments').upsert({
-          assignment_id: assignmentId,
-          student_id: studentId,
-          status: 'SELESAI',
-          score: finalScore,
-          submitted_at: nowIso
-        }, { onConflict: 'assignment_id,student_id' });
-
-        await syncRowToSupabase('tugas_siswa', sub, true);
-      } catch (err) {
-        console.warn('[Assignment Service] Error finishing assignment in Supabase:', err);
-      }
-    }
+    // Sync canonical table `tugas_siswa`
+    await syncRowToSupabase('tugas_siswa', sub, true).catch(err => console.warn(err));
 
     return sub;
   },
@@ -262,7 +251,7 @@ export const assignmentService = {
     if (scoreVal != null) {
       const task = db.daftarTugas.getAll().find(t => t.id === sub.tugasId);
       const student = db.siswa.getAll().find(s => s.id === sub.siswaId);
-      const asmItem = {
+      const pnlItem = {
         id: `as-${sub.tugasId}-${sub.siswaId}`,
         siswaId: sub.siswaId,
         mapelId: task?.mapelId || 'mapel-1',
@@ -274,10 +263,10 @@ export const assignmentService = {
         dinilaiOlehId: task?.dibuatOlehId || 'guru-1',
         kelas: student?.kelas || task?.kelas || 'Kelas 4-A'
       };
-      db.asesmen.upsert(asmItem);
-      syncRowToSupabase('asesmen', asmItem, true).catch(err => console.warn(err));
-      window.dispatchEvent(new Event('asesmens-updated'));
-      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+      db.penilaian.upsert(pnlItem);
+      syncRowToSupabase('penilaian', pnlItem, true).catch(err => console.warn(err));
+      window.dispatchEvent(new Event('penilaians-updated'));
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
     }
 
     const res = await syncRowToSupabase('tugas_siswa', sub, true);

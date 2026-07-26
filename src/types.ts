@@ -2,7 +2,23 @@ export type UserRole = 'operator' | 'guru' | 'siswa' | 'orang_tua';
 
 export type StatusKehadiran = 'hadir' | 'sakit' | 'izin' | 'alfa';
 
-export type TipeAsesmen = 'harian' | 'sts' | 'sas' | 'kokurikuler';
+export type TipePenilaian = 'harian' | 'sts' | 'sas' | 'kokurikuler';
+export type TipeAsesmen = TipePenilaian;
+
+export interface Penilaian {
+  id: string;
+  siswaId: string;
+  mapelId: string;
+  tipe: TipePenilaian;
+  namaPenilaian: string; // PH 1, STS Genap, etc.
+  nilai: number;
+  deskripsiKompetensi?: string;
+  tanggalPenilaian: string; // YYYY-MM-DD
+  dinilaiOlehId?: string; // Relasi ke Guru
+  kelas?: string; // Spesifik kelas (e.g. "Kelas I", "Kelas IV", etc)
+}
+
+export type Asesmen = Penilaian;
 
 export interface ProfilSekolah {
   id: string;
@@ -150,19 +166,6 @@ export interface TugasSiswa {
   nilai?: number;
   score?: number | null;
   umpanBalik?: string;
-}
-
-export interface Asesmen {
-  id: string;
-  siswaId: string;
-  mapelId: string;
-  tipe: TipeAsesmen;
-  namaPenilaian: string; // PH 1, STS Genap, etc.
-  nilai: number;
-  deskripsiKompetensi?: string;
-  tanggalPenilaian: string; // YYYY-MM-DD
-  dinilaiOlehId?: string; // Relasi ke Guru
-  kelas?: string; // Spesifik kelas (e.g. "Kelas I", "Kelas IV", etc)
 }
 
 export interface TemuanKhusus {

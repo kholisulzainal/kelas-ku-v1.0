@@ -148,21 +148,16 @@ CREATE TABLE IF NOT EXISTS public.profil_sekolah (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. User Profiles
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  email text UNIQUE NOT NULL,
-  nama_lengkap text NOT NULL,
-  role user_role NOT NULL DEFAULT 'guru_mapel',
-  avatar_url text,
-  no_telepon text,
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+-- 1. Cleaning up Deprecated Tables
+DROP TABLE IF EXISTS public.student_assignments CASCADE;
+DROP TABLE IF EXISTS public.assignments CASCADE;
+DROP TABLE IF EXISTS public.ppdb CASCADE;
+DROP TABLE IF EXISTS public.news CASCADE;
+DROP TABLE IF EXISTS public.gallery CASCADE;
 
--- 3. Data Guru
+-- 2. Data Guru
 CREATE TABLE IF NOT EXISTS public.guru (
   id text PRIMARY KEY DEFAULT ('guru-' || extract(epoch from now())::bigint),
-  profile_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   nip text UNIQUE NOT NULL,
   nama_guru text NOT NULL,
   gelar text,
@@ -176,7 +171,7 @@ CREATE TABLE IF NOT EXISTS public.guru (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 4. Data Kelas
+-- 3. Data Kelas
 CREATE TABLE IF NOT EXISTS public.data_kelas (
   id text PRIMARY KEY DEFAULT ('kelas-' || extract(epoch from now())::bigint),
   nama_kelas text UNIQUE NOT NULL,
@@ -186,10 +181,9 @@ CREATE TABLE IF NOT EXISTS public.data_kelas (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 5. Data Siswa
+-- 4. Data Siswa
 CREATE TABLE IF NOT EXISTS public.siswa (
   id text PRIMARY KEY DEFAULT ('siswa-' || extract(epoch from now())::bigint),
-  profile_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   nisn text UNIQUE NOT NULL,
   nis text UNIQUE,
   nama_siswa text NOT NULL,
@@ -201,14 +195,14 @@ CREATE TABLE IF NOT EXISTS public.siswa (
   nama_ayah text,
   nama_ibu text,
   no_telepon_ortu text,
+  email text,
   password text NOT NULL DEFAULT 'siswa123',
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 6. Data Orang Tua
+-- 5. Data Orang Tua
 CREATE TABLE IF NOT EXISTS public.orang_tua (
   id text PRIMARY KEY DEFAULT ('ortu-' || extract(epoch from now())::bigint),
-  profile_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   nama_ortu text NOT NULL,
   siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE,
   hubungan text DEFAULT 'Ayah/Ibu/Wali',
@@ -217,7 +211,7 @@ CREATE TABLE IF NOT EXISTS public.orang_tua (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 7. Mata Pelajaran
+-- 6. Mata Pelajaran
 CREATE TABLE IF NOT EXISTS public.mata_pelajaran (
   id text PRIMARY KEY DEFAULT ('mapel-' || extract(epoch from now())::bigint),
   kode_mapel text UNIQUE NOT NULL,
@@ -228,7 +222,7 @@ CREATE TABLE IF NOT EXISTS public.mata_pelajaran (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 8. Jadwal Pelajaran
+-- 7. Jadwal Pelajaran
 CREATE TABLE IF NOT EXISTS public.jadwal_pelajaran (
   id text PRIMARY KEY DEFAULT ('jadwal-' || extract(epoch from now())::bigint),
   mapel_id text REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
@@ -240,7 +234,7 @@ CREATE TABLE IF NOT EXISTS public.jadwal_pelajaran (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 9. Absensi Siswa
+-- 8. Absensi Siswa
 CREATE TABLE IF NOT EXISTS public.absensi (
   id text PRIMARY KEY DEFAULT ('abs-' || extract(epoch from now())::bigint),
   siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
@@ -252,7 +246,7 @@ CREATE TABLE IF NOT EXISTS public.absensi (
   CONSTRAINT unique_siswa_tanggal UNIQUE (siswa_id, tanggal)
 );
 
--- 10. Daftar Tugas
+-- 9. Daftar Tugas
 CREATE TABLE IF NOT EXISTS public.daftar_tugas (
   id text PRIMARY KEY DEFAULT ('tugas-' || extract(epoch from now())::bigint),
   mapel_id text REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
@@ -266,74 +260,31 @@ CREATE TABLE IF NOT EXISTS public.daftar_tugas (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 11. Tugas Siswa
+-- 10. Tugas Siswa
 CREATE TABLE IF NOT EXISTS public.tugas_siswa (
   id text PRIMARY KEY DEFAULT ('ts-' || extract(epoch from now())::bigint),
   tugas_id text REFERENCES public.daftar_tugas(id) ON DELETE CASCADE NOT NULL,
   siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
   status_pengerjaan boolean DEFAULT false,
+  status text DEFAULT 'BELUM_DIKERJAKAN',
+  score numeric,
+  nilai numeric,
+  started_at timestamp with time zone,
+  submitted_at timestamp with time zone,
   tanggal_dikerjakan text,
-  nilai integer CHECK (nilai >= 0 AND nilai <= 100),
   umpan_balik text,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
   CONSTRAINT unique_tugas_siswa UNIQUE (tugas_id, siswa_id)
 );
 
--- 11b. Assignments (Hybrid Tracking Tahap 1)
-CREATE TABLE IF NOT EXISTS public.assignments (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    title varchar(255) NOT NULL,
-    description text,
-    class_id uuid NOT NULL,
-    subject_id uuid NOT NULL,
-    teacher_id uuid NOT NULL,
-    google_form_url text NOT NULL,
-    created_at timestamp with time zone DEFAULT now()
-);
-
--- 11c. Student Assignments (Hybrid Tracking Tahap 1)
-CREATE TABLE IF NOT EXISTS public.student_assignments (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    assignment_id uuid NOT NULL REFERENCES public.assignments(id) ON DELETE CASCADE,
-    student_id uuid NOT NULL,
-    status varchar(50) DEFAULT 'BELUM_DIKERJAKAN' CHECK (status IN ('BELUM_DIKERJAKAN', 'SEDANG_MENGERJAKAN', 'SELESAI')),
-    score numeric(5, 2) DEFAULT NULL,
-    started_at timestamp with time zone,
-    submitted_at timestamp with time zone,
-    CONSTRAINT unique_assignment_student UNIQUE (assignment_id, student_id)
-);
-
--- Trigger Auto-Timestamp
-CREATE OR REPLACE FUNCTION public.fn_auto_timestamp_student_assignments()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.status = 'SEDANG_MENGERJAKAN' AND NEW.started_at IS NULL THEN
-        NEW.started_at := NOW();
-    END IF;
-
-    IF NEW.status = 'SELESAI' AND NEW.submitted_at IS NULL THEN
-        NEW.submitted_at := NOW();
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_auto_timestamp_student_assignments ON public.student_assignments;
-
-CREATE TRIGGER trg_auto_timestamp_student_assignments
-BEFORE INSERT OR UPDATE ON public.student_assignments
-FOR EACH ROW
-EXECUTE FUNCTION public.fn_auto_timestamp_student_assignments();
-
--- 12. Asesmen / Rekap Nilai
-CREATE TABLE IF NOT EXISTS public.asesmen (
-  id text PRIMARY KEY DEFAULT ('as-' || extract(epoch from now())::bigint),
+-- 11. Penilaian (Substansi & Matrix Nilai Rapor)
+CREATE TABLE IF NOT EXISTS public.penilaian (
+  id text PRIMARY KEY DEFAULT ('pnl-' || extract(epoch from now())::bigint),
   siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
   mapel_id text REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
   tipe text NOT NULL DEFAULT 'harian',
   nama_penilaian text NOT NULL,
-  nilai integer NOT NULL CHECK (nilai >= 0 AND nilai <= 100),
+  nilai numeric NOT NULL CHECK (nilai >= 0 AND nilai <= 100),
   deskripsi_kompetensi text,
   tanggal_penilaian text NOT NULL,
   dinilai_oleh_id text REFERENCES public.guru(id) ON DELETE SET NULL,
@@ -341,7 +292,7 @@ CREATE TABLE IF NOT EXISTS public.asesmen (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 13. Temuan Khusus
+-- 12. Temuan Khusus
 CREATE TABLE IF NOT EXISTS public.temuan_khusus (
   id text PRIMARY KEY DEFAULT ('tk-' || extract(epoch from now())::bigint),
   siswa_id text REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
@@ -354,7 +305,7 @@ CREATE TABLE IF NOT EXISTS public.temuan_khusus (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 14. Notifikasi
+-- 13. Notifikasi
 CREATE TABLE IF NOT EXISTS public.notifikasi (
   id text PRIMARY KEY DEFAULT ('notif-' || extract(epoch from now())::bigint),
   penerima_role text NOT NULL,
@@ -367,29 +318,7 @@ CREATE TABLE IF NOT EXISTS public.notifikasi (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 15. News & Gallery & Settings
-CREATE TABLE IF NOT EXISTS public.news (
-  id text PRIMARY KEY DEFAULT ('news-' || extract(epoch from now())::bigint),
-  judul text NOT NULL,
-  konten text NOT NULL,
-  kategori text DEFAULT 'Pengumuman',
-  penulis text DEFAULT 'Admin',
-  tanggal text,
-  thumbnail_url text,
-  published boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS public.gallery (
-  id text PRIMARY KEY DEFAULT ('gal-' || extract(epoch from now())::bigint),
-  judul text NOT NULL,
-  deskripsi text,
-  image_url text NOT NULL,
-  kategori text DEFAULT 'Kegiatan',
-  tanggal text,
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
+-- 14. Application Settings
 CREATE TABLE IF NOT EXISTS public.application_settings (
   id text PRIMARY KEY DEFAULT 'app-settings-001',
   theme text DEFAULT 'light',
@@ -403,24 +332,7 @@ CREATE TABLE IF NOT EXISTS public.application_settings (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS public.ppdb (
-  id text PRIMARY KEY DEFAULT ('ppdb-' || extract(epoch from now())::bigint),
-  nama_lengkap text NOT NULL,
-  nisn text,
-  jenis_kelamin text DEFAULT 'L',
-  tempat_lahir text,
-  tanggal_lahir text,
-  nama_ayah text,
-  nama_ibu text,
-  no_telepon_ortu text,
-  alamat text,
-  status_pendaftaran text DEFAULT 'Daftar',
-  dokumen_url text,
-  foto_url text,
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 16. Buku Digital
+-- 15. Buku Digital
 CREATE TABLE IF NOT EXISTS public.buku_digital (
   id text PRIMARY KEY DEFAULT ('book-' || extract(epoch from now())::bigint),
   judul text NOT NULL,
@@ -444,9 +356,6 @@ VALUES
   ('students', 'students', true),
   ('documents', 'documents', true),
   ('assignments', 'assignments', true),
-  ('ppdb', 'ppdb', true),
-  ('gallery', 'gallery', true),
-  ('news', 'news', true),
   ('avatars', 'avatars', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
@@ -461,10 +370,9 @@ DECLARE
   t text;
 BEGIN
   FOR t IN SELECT unnest(ARRAY[
-    'profil_sekolah','profiles','guru','data_kelas','siswa','orang_tua',
+    'profil_sekolah','guru','data_kelas','siswa','orang_tua',
     'mata_pelajaran','jadwal_pelajaran','absensi','daftar_tugas','tugas_siswa',
-    'assignments','student_assignments',
-    'asesmen','temuan_khusus','notifikasi','news','gallery','application_settings','ppdb','buku_digital'
+    'penilaian','temuan_khusus','notifikasi','application_settings','buku_digital'
   ])
   LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
@@ -490,15 +398,11 @@ const VALID_COLUMNS: { [key: string]: string[] } = {
   absensi: ['id', 'siswa_id', 'tanggal', 'status', 'keterangan', 'dicatat_oleh_id'],
   daftar_tugas: ['id', 'mapel_id', 'judul_tugas', 'deskripsi', 'google_form_url', 'tanggal_diberikan', 'tenggat_waktu', 'dibuat_oleh_id', 'kelas'],
   tugas_siswa: ['id', 'tugas_id', 'siswa_id', 'status_pengerjaan', 'status', 'started_at', 'submitted_at', 'score', 'tanggal_dikerjakan', 'nilai', 'umpan_balik'],
-  assignments: ['id', 'title', 'description', 'class_id', 'subject_id', 'teacher_id', 'google_form_url', 'created_at'],
-  student_assignments: ['id', 'assignment_id', 'student_id', 'status', 'score', 'started_at', 'submitted_at'],
+  penilaian: ['id', 'siswa_id', 'mapel_id', 'tipe', 'nama_penilaian', 'nilai', 'deskripsi_kompetensi', 'tanggal_penilaian', 'dinilai_oleh_id', 'kelas'],
   asesmen: ['id', 'siswa_id', 'mapel_id', 'tipe', 'nama_penilaian', 'nilai', 'deskripsi_kompetensi', 'tanggal_penilaian', 'dinilai_oleh_id', 'kelas'],
   temuan_khusus: ['id', 'siswa_id', 'tanggal', 'kategori', 'deskripsi', 'tindakan_lanjut', 'dilaporkan_oleh_id', 'kelas'],
   notifikasi: ['id', 'penerima_role', 'penerima_user_id', 'judul', 'pesan', 'tanggal', 'dibaca', 'tugas_id'],
-  news: ['id', 'judul', 'konten', 'kategori', 'penulis', 'tanggal', 'thumbnail_url', 'published'],
-  gallery: ['id', 'judul', 'deskripsi', 'image_url', 'kategori', 'tanggal'],
   application_settings: ['id', 'theme', 'primary_color', 'secondary_color', 'website_title', 'footer_text', 'vision', 'mission', 'welcome_message'],
-  ppdb: ['id', 'nama_lengkap', 'nisn', 'jenis_kelamin', 'tempat_lahir', 'tanggal_lahir', 'nama_ayah', 'nama_ibu', 'no_telepon_ortu', 'alamat', 'status_pendaftaran', 'dokumen_url', 'foto_url'],
   buku_digital: ['id', 'judul', 'kelas', 'kategori_buku', 'mapel_id', 'mapel_nama', 'file_url', 'cover_url', 'deskripsi', 'penulis', 'uploaded_by', 'created_at']
 };
 
@@ -1123,13 +1027,10 @@ export async function syncAllToSupabase(): Promise<{ success: boolean; results?:
     { name: 'absensi', isArray: true },
     { name: 'daftar_tugas', isArray: true },
     { name: 'tugas_siswa', isArray: true },
-    { name: 'asesmen', isArray: true },
+    { name: 'penilaian', isArray: true },
     { name: 'temuan_khusus', isArray: true },
     { name: 'notifikasi', isArray: true },
-    { name: 'news', isArray: true },
-    { name: 'gallery', isArray: true },
     { name: 'application_settings', isArray: false },
-    { name: 'ppdb', isArray: true },
     { name: 'buku_digital', isArray: true }
   ];
 
@@ -1233,13 +1134,10 @@ export async function pullAllFromSupabase(): Promise<{ success: boolean; error?:
     { dbName: 'absensi', localName: 'absensi', isArray: true },
     { dbName: 'daftar_tugas', localName: 'daftar_tugas', isArray: true },
     { dbName: 'tugas_siswa', localName: 'tugas_siswa', isArray: true },
-    { dbName: 'asesmen', localName: 'asesmen', isArray: true },
+    { dbName: 'penilaian', localName: 'penilaian', isArray: true },
     { dbName: 'temuan_khusus', localName: 'temuan_khusus', isArray: true },
     { dbName: 'notifikasi', localName: 'notifikasi', isArray: true },
-    { dbName: 'news', localName: 'news_articles', isArray: true },
-    { dbName: 'gallery', localName: 'gallery_items', isArray: true },
     { dbName: 'application_settings', localName: 'app_settings', isArray: false },
-    { dbName: 'ppdb', localName: 'ppdb_applicants', isArray: true },
     { dbName: 'buku_digital', localName: 'buku_digital', isArray: true }
   ];
 
