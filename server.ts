@@ -249,20 +249,24 @@ async function startServer() {
         if (pnlError) {
           console.warn('[Webhook Google Form] penilaian primary upsert notice:', pnlError.message);
           // Try fallback upsert to legacy asesmen if penilaian table doesn't exist yet
-          await supabase
-            .from('asesmen')
-            .upsert({
-              id: `as-${cleanAssignmentId}-${targetId}`,
-              siswa_id: targetId,
-              mapel_id: mapelId,
-              tipe: 'harian',
-              nama_penilaian: judulTugas,
-              nilai: parsedScore,
-              deskripsi_kompetensi: `Nilai otomatis dari Google Form Webhook (${judulTugas}) pada ${new Date().toLocaleString('id-ID')}`,
-              tanggal_penilaian: todayStr,
-              dinilai_oleh_id: dibuatOlehId,
-              kelas: taskKelas || studentClass
-            }).catch(() => {});
+          try {
+            await supabase
+              .from('asesmen')
+              .upsert({
+                id: `as-${cleanAssignmentId}-${targetId}`,
+                siswa_id: targetId,
+                mapel_id: mapelId,
+                tipe: 'harian',
+                nama_penilaian: judulTugas,
+                nilai: parsedScore,
+                deskripsi_kompetensi: `Nilai otomatis dari Google Form Webhook (${judulTugas}) pada ${new Date().toLocaleString('id-ID')}`,
+                tanggal_penilaian: todayStr,
+                dinilai_oleh_id: dibuatOlehId,
+                kelas: taskKelas || studentClass
+              });
+          } catch (asesmenErr) {
+            console.warn('[Webhook Google Form] Asesmen fallback notice:', asesmenErr);
+          }
         }
       }
 

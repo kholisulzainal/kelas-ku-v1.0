@@ -2,7 +2,7 @@ import { db } from './db';
 import { getSupabaseClient, syncRowToSupabase, deleteRowFromSupabase } from './supabase';
 import { Siswa } from '../types';
 
-export const studentService = {
+export const siswaService = {
   async getAll(): Promise<Siswa[]> {
     const client = getSupabaseClient();
     if (client) {
@@ -27,15 +27,15 @@ export const studentService = {
           return students;
         }
       } catch (err) {
-        console.warn('[Student Service] Error fetching students from Supabase:', err);
+        console.warn('[Siswa Service] Error fetching students from Supabase:', err);
       }
     }
     return db.siswa.getAll();
   },
 
-  async upsert(student: Siswa): Promise<{ success: boolean; error?: string }> {
-    db.siswa.upsert(student);
-    const res = await syncRowToSupabase('siswa', student, true);
+  async upsert(siswa: Siswa): Promise<{ success: boolean; error?: string }> {
+    db.siswa.upsert(siswa);
+    const res = await syncRowToSupabase('siswa', siswa, true);
     return { success: res.success, error: res.error };
   },
 

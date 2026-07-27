@@ -28,12 +28,23 @@ interface SiswaDashboardProps {
 
 export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
   const currentSiswa = db.siswa.getAll().find(s => s.id === siswaId);
+  const candidateIds = Array.from(new Set([
+    siswaId,
+    currentSiswa?.email?.toLowerCase(),
+    currentSiswa?.nisn
+  ].filter(Boolean) as string[]));
 
   // Load States
   const [tasks, setTasks] = useState<DaftarTugas[]>(db.daftarTugas.getAll());
-  const [mySubmissions, setMySubmissions] = useState<TugasSiswa[]>(db.tugasSiswa.getAll().filter(ts => ts.siswaId === siswaId));
-  const [myGrades, setMyGrades] = useState<Asesmen[]>(db.asesmen.getAll().filter(a => a.siswaId === siswaId));
-  const [myAttendance, setMyAttendance] = useState<Absensi[]>(db.absensi.getAll().filter(a => a.siswaId === siswaId));
+  const [mySubmissions, setMySubmissions] = useState<TugasSiswa[]>(
+    db.tugasSiswa.getAll().filter(ts => candidateIds.includes(ts.siswaId))
+  );
+  const [myGrades, setMyGrades] = useState<Asesmen[]>(
+    db.asesmen.getAll().filter(a => candidateIds.includes(a.siswaId))
+  );
+  const [myAttendance, setMyAttendance] = useState<Absensi[]>(
+    db.absensi.getAll().filter(a => candidateIds.includes(a.siswaId))
+  );
   const [syncingTaskId, setSyncingTaskId] = useState<string | null>(null);
   const [syncStep, setSyncStep] = useState<number>(0);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -79,10 +90,17 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
   useEffect(() => {
     // Sync states on real-time event or fallback interval
     const sync = () => {
+      const sObj = db.siswa.getAll().find(s => s.id === siswaId);
+      const cIds = Array.from(new Set([
+        siswaId,
+        sObj?.email?.toLowerCase(),
+        sObj?.nisn
+      ].filter(Boolean) as string[]));
+
       setTasks(db.daftarTugas.getAll());
-      setMySubmissions(db.tugasSiswa.getAll().filter(ts => ts.siswaId === siswaId));
-      setMyGrades(db.asesmen.getAll().filter(a => a.siswaId === siswaId));
-      setMyAttendance(db.absensi.getAll().filter(a => a.siswaId === siswaId));
+      setMySubmissions(db.tugasSiswa.getAll().filter(ts => cIds.includes(ts.siswaId)));
+      setMyGrades(db.asesmen.getAll().filter(a => cIds.includes(a.siswaId)));
+      setMyAttendance(db.absensi.getAll().filter(a => cIds.includes(a.siswaId)));
     };
 
     window.addEventListener('supabase-data-updated', sync);

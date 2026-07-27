@@ -2,7 +2,7 @@ import { db } from './db';
 import { getSupabaseClient, syncRowToSupabase, deleteRowFromSupabase } from './supabase';
 import { Guru } from '../types';
 
-export const teacherService = {
+export const guruService = {
   async getAll(): Promise<Guru[]> {
     const client = getSupabaseClient();
     if (client) {
@@ -26,15 +26,15 @@ export const teacherService = {
           return teachers;
         }
       } catch (err) {
-        console.warn('[Teacher Service] Error fetching teachers from Supabase:', err);
+        console.warn('[Guru Service] Error fetching teachers from Supabase:', err);
       }
     }
     return db.guru.getAll();
   },
 
-  async upsert(teacher: Guru): Promise<{ success: boolean; error?: string }> {
-    db.guru.upsert(teacher);
-    const res = await syncRowToSupabase('guru', teacher, true);
+  async upsert(guru: Guru): Promise<{ success: boolean; error?: string }> {
+    db.guru.upsert(guru);
+    const res = await syncRowToSupabase('guru', guru, true);
     return { success: res.success, error: res.error };
   },
 

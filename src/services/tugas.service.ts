@@ -1,9 +1,9 @@
 import { db } from './db';
 import { getSupabaseClient, syncRowToSupabase, deleteRowFromSupabase } from './supabase';
-import { DaftarTugas, TugasSiswa, StudentAssignment, AssignmentStatus } from '../types';
+import { DaftarTugas, TugasSiswa, AssignmentStatus } from '../types';
 
-export const assignmentService = {
-  async getTasks(): Promise<DaftarTugas[]> {
+export const tugasService = {
+  async getDaftarTugas(): Promise<DaftarTugas[]> {
     const client = getSupabaseClient();
     if (client) {
       try {
@@ -24,25 +24,37 @@ export const assignmentService = {
           return items;
         }
       } catch (err) {
-        console.warn('[Assignment Service] Error fetching tasks from Supabase:', err);
+        console.warn('[Tugas Service] Error fetching tasks from Supabase:', err);
       }
     }
     return db.daftarTugas.getAll();
   },
 
-  async upsertTask(task: DaftarTugas): Promise<{ success: boolean; error?: string }> {
+  async getTasks(): Promise<DaftarTugas[]> {
+    return this.getDaftarTugas();
+  },
+
+  async upsertDaftarTugas(task: DaftarTugas): Promise<{ success: boolean; error?: string }> {
     db.daftarTugas.upsert(task);
     const res = await syncRowToSupabase('daftar_tugas', task, true);
     return { success: res.success, error: res.error };
   },
 
-  async deleteTask(id: string): Promise<{ success: boolean; error?: string }> {
+  async upsertTask(task: DaftarTugas): Promise<{ success: boolean; error?: string }> {
+    return this.upsertDaftarTugas(task);
+  },
+
+  async deleteDaftarTugas(id: string): Promise<{ success: boolean; error?: string }> {
     db.daftarTugas.delete(id);
     const res = await deleteRowFromSupabase('daftar_tugas', id);
     return { success: res.success, error: res.error };
   },
 
-  async getSubmissions(): Promise<TugasSiswa[]> {
+  async deleteTask(id: string): Promise<{ success: boolean; error?: string }> {
+    return this.deleteDaftarTugas(id);
+  },
+
+  async getTugasSiswa(): Promise<TugasSiswa[]> {
     const client = getSupabaseClient();
     if (client) {
       try {
@@ -53,7 +65,7 @@ export const assignmentService = {
             tugasId: ts.tugas_id,
             siswaId: ts.siswa_id,
             statusPengerjaan: Boolean(ts.status_pengerjaan),
-            status: ts.status as AssignmentStatus || (ts.status_pengerjaan ? 'SELESAI' : 'BELUM_DIKERJAKAN'),
+            status: (ts.status as AssignmentStatus) || (ts.status_pengerjaan ? 'SELESAI' : 'BELUM_DIKERJAKAN'),
             startedAt: ts.started_at || null,
             submittedAt: ts.submitted_at || null,
             tanggalDikerjakan: ts.tanggal_dikerjakan || '',
@@ -65,13 +77,17 @@ export const assignmentService = {
           return items;
         }
       } catch (err) {
-        console.warn('[Assignment Service] Error fetching submissions from Supabase:', err);
+        console.warn('[Tugas Service] Error fetching submissions from Supabase:', err);
       }
     }
     return db.tugasSiswa.getAll();
   },
 
-  async getStudentAssignmentStatus(assignmentId: string, studentId: string): Promise<{
+  async getSubmissions(): Promise<TugasSiswa[]> {
+    return this.getTugasSiswa();
+  },
+
+  async getStatusTugasSiswa(tugasId: string, siswaId: string): Promise<{
     status: AssignmentStatus;
     score?: number | null;
     startedAt?: string | null;
@@ -81,21 +97,20 @@ export const assignmentService = {
     const client = getSupabaseClient();
     
     // Find student details to get candidate IDs (id, email, emailPrefix)
-    const currentSiswa = db.siswa.getAll().find(s => s.id === studentId);
+    const currentSiswa = db.siswa.getAll().find(s => s.id === siswaId);
     const studentEmail = currentSiswa?.email?.trim().toLowerCase();
-    const emailPrefix = studentEmail ? studentEmail.split('@')[0] : (studentId.includes('@') ? studentId.split('@')[0] : null);
+    const emailPrefix = studentEmail ? studentEmail.split('@')[0] : (siswaId.includes('@') ? siswaId.split('@')[0] : null);
 
     const targetIds = Array.from(
-      new Set([studentId, studentEmail, emailPrefix].filter(Boolean) as string[])
+      new Set([siswaId, studentEmail, emailPrefix].filter(Boolean) as string[])
     );
 
-    // 1. Check canonical table `tugas_siswa` in Supabase FIRST
     if (client) {
       try {
         const { data: tsData, error: tsError } = await client
           .from('tugas_siswa')
           .select('*')
-          .eq('tugas_id', assignmentId)
+          .eq('tugas_id', tugasId)
           .in('siswa_id', targetIds)
           .order('submitted_at', { ascending: false })
           .limit(1);
@@ -105,9 +120,9 @@ export const assignmentService = {
           const parsedScore = tsRow.score ?? tsRow.nilai ?? null;
 
           const localSub: TugasSiswa = {
-            id: tsRow.id || `ts-${assignmentId}-${studentId}`,
-            tugasId: assignmentId,
-            siswaId: studentId,
+            id: tsRow.id || `ts-${tugasId}-${siswaId}`,
+            tugasId: tugasId,
+            siswaId: siswaId,
             statusPengerjaan: Boolean(tsRow.status_pengerjaan || tsRow.status === 'SELESAI'),
             status: (tsRow.status as AssignmentStatus) || (tsRow.status_pengerjaan ? 'SELESAI' : 'BELUM_DIKERJAKAN'),
             startedAt: tsRow.started_at || null,
@@ -121,11 +136,11 @@ export const assignmentService = {
           db.tugasSiswa.upsert(localSub);
 
           if (parsedScore != null) {
-            const task = db.daftarTugas.getAll().find(t => t.id === assignmentId);
-            const student = db.siswa.getAll().find(s => s.id === studentId);
+            const task = db.daftarTugas.getAll().find(t => t.id === tugasId);
+            const student = db.siswa.getAll().find(s => s.id === siswaId);
             db.penilaian.upsert({
-              id: `as-${assignmentId}-${studentId}`,
-              siswaId: studentId,
+              id: `as-${tugasId}-${siswaId}`,
+              siswaId: siswaId,
               mapelId: task?.mapelId || 'mapel-1',
               tipe: 'harian',
               namaPenilaian: task?.judulTugas || 'Kuis Google Form',
@@ -148,13 +163,12 @@ export const assignmentService = {
           };
         }
       } catch (err) {
-        console.warn('[Assignment Service] tugas_siswa check notice:', err);
+        console.warn('[Tugas Service] tugas_siswa check notice:', err);
       }
     }
 
-    // 2. Fallback to local DB `tugas_siswa`
     const submissions = db.tugasSiswa.getAll();
-    const sub = submissions.find(s => s.tugasId === assignmentId && targetIds.includes(s.siswaId));
+    const sub = submissions.find(s => s.tugasId === tugasId && targetIds.includes(s.siswaId));
     
     if (sub) {
       const status: AssignmentStatus = sub.status || (sub.statusPengerjaan ? 'SELESAI' : (sub.startedAt ? 'SEDANG_MENGERJAKAN' : 'BELUM_DIKERJAKAN'));
@@ -170,38 +184,43 @@ export const assignmentService = {
     return { status: 'BELUM_DIKERJAKAN' };
   },
 
-  async startAssignment(assignmentId: string, studentId: string): Promise<TugasSiswa> {
+  async getStudentAssignmentStatus(assignmentId: string, studentId: string) {
+    return this.getStatusTugasSiswa(assignmentId, studentId);
+  },
+
+  async mulaiTugas(tugasId: string, siswaId: string): Promise<TugasSiswa> {
     const nowIso = new Date().toISOString();
     
-    // 1. Prepare local submission
-    const existing = db.tugasSiswa.getAll().find(s => s.tugasId === assignmentId && s.siswaId === studentId);
+    const existing = db.tugasSiswa.getAll().find(s => s.tugasId === tugasId && s.siswaId === siswaId);
     const sub: TugasSiswa = {
-      id: existing?.id || `ts-${assignmentId}-${studentId}`,
-      tugasId: assignmentId,
-      siswaId: studentId,
+      id: existing?.id || `ts-${tugasId}-${siswaId}`,
+      tugasId: tugasId,
+      siswaId: siswaId,
       statusPengerjaan: false,
       status: 'SEDANG_MENGERJAKAN',
       startedAt: existing?.startedAt || nowIso
     };
 
     db.tugasSiswa.upsert(sub);
-
-    // 2. Sync to Supabase `tugas_siswa`
     await syncRowToSupabase('tugas_siswa', sub, true).catch(e => console.warn(e));
 
     return sub;
   },
 
-  async finishAssignment(assignmentId: string, studentId: string, customScore?: number, umpanBalik?: string): Promise<TugasSiswa> {
+  async startAssignment(assignmentId: string, studentId: string): Promise<TugasSiswa> {
+    return this.mulaiTugas(assignmentId, studentId);
+  },
+
+  async selesaiTugas(tugasId: string, siswaId: string, customScore?: number, umpanBalik?: string): Promise<TugasSiswa> {
     const nowIso = new Date().toISOString();
     const todayStr = new Date().toISOString().split('T')[0];
     const finalScore = customScore != null ? customScore : null;
 
-    const existing = db.tugasSiswa.getAll().find(s => s.tugasId === assignmentId && s.siswaId === studentId);
+    const existing = db.tugasSiswa.getAll().find(s => s.tugasId === tugasId && s.siswaId === siswaId);
     const sub: TugasSiswa = {
-      id: existing?.id || `ts-${assignmentId}-${studentId}`,
-      tugasId: assignmentId,
-      siswaId: studentId,
+      id: existing?.id || `ts-${tugasId}-${siswaId}`,
+      tugasId: tugasId,
+      siswaId: siswaId,
       statusPengerjaan: true,
       status: 'SELESAI',
       startedAt: existing?.startedAt || nowIso,
@@ -214,14 +233,13 @@ export const assignmentService = {
 
     db.tugasSiswa.upsert(sub);
 
-    // Sync to `penilaian` table so grade immediately appears in Penilaian Matrix
     if (finalScore != null) {
-      const task = db.daftarTugas.getAll().find(t => t.id === assignmentId);
-      const student = db.siswa.getAll().find(s => s.id === studentId);
+      const task = db.daftarTugas.getAll().find(t => t.id === tugasId);
+      const student = db.siswa.getAll().find(s => s.id === siswaId);
 
       const pnlItem = {
-        id: `as-${assignmentId}-${studentId}`,
-        siswaId: studentId,
+        id: `as-${tugasId}-${siswaId}`,
+        siswaId: siswaId,
         mapelId: task?.mapelId || 'mapel-1',
         tipe: 'harian' as const,
         namaPenilaian: task?.judulTugas || 'Tugas Google Form',
@@ -238,13 +256,16 @@ export const assignmentService = {
       window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
     }
 
-    // Sync canonical table `tugas_siswa`
     await syncRowToSupabase('tugas_siswa', sub, true).catch(err => console.warn(err));
 
     return sub;
   },
 
-  async upsertSubmission(sub: TugasSiswa): Promise<{ success: boolean; error?: string }> {
+  async finishAssignment(assignmentId: string, studentId: string, customScore?: number, umpanBalik?: string): Promise<TugasSiswa> {
+    return this.selesaiTugas(assignmentId, studentId, customScore, umpanBalik);
+  },
+
+  async upsertTugasSiswa(sub: TugasSiswa): Promise<{ success: boolean; error?: string }> {
     db.tugasSiswa.upsert(sub);
 
     const scoreVal = sub.score ?? sub.nilai;
@@ -271,6 +292,9 @@ export const assignmentService = {
 
     const res = await syncRowToSupabase('tugas_siswa', sub, true);
     return { success: res.success, error: res.error };
+  },
+
+  async upsertSubmission(sub: TugasSiswa) {
+    return this.upsertTugasSiswa(sub);
   }
 };
-

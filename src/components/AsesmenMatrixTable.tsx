@@ -84,11 +84,72 @@ export function AsesmenMatrixTable({
   }, [filteredMapels, daftarTugas]);
 
   // Matrix cell getter
-  const getNilaiValue = (siswaId: string, mapelId: string, namaPenilaian: string): number | '' => {
-    const match = asesmens.find(
-      a => a.siswaId === siswaId && a.mapelId === mapelId && a.namaPenilaian === namaPenilaian
+  const getNilaiValue = (siswaId: string, mapelId: string, colName: string, colIndex: number = 0): number | '' => {
+    // 1. Check exact namaPenilaian match (e.g. 'T1', 'T2', 'Kuis/STS')
+    const matchExact = asesmens.find(
+      a => a.siswaId === siswaId && a.mapelId === mapelId && a.namaPenilaian === colName
     );
-    return match !== undefined ? match.nilai : '';
+    if (matchExact !== undefined && matchExact.nilai !== undefined && matchExact.nilai !== null) {
+      return matchExact.nilai;
+    }
+
+    // 2. If checking for T1, T2, T3 etc., also check if there is an assignment grade matching that index or task title
+    if (colName.startsWith('T')) {
+      const subjectTasks = daftarTugas.filter(t => t.mapelId === mapelId);
+      const targetTask = subjectTasks[colIndex];
+
+      // Find student candidate IDs
+      const studentObj = siswas.find(s => s.id === siswaId);
+      const candidateIds = Array.from(new Set([
+        siswaId,
+        studentObj?.email?.toLowerCase(),
+        studentObj?.nisn
+      ].filter(Boolean) as string[]));
+
+      if (targetTask) {
+        // Find score in asesmens by task title OR task ID
+        const matchTask = asesmens.find(
+          a => candidateIds.includes(a.siswaId) && a.mapelId === mapelId && (a.namaPenilaian === targetTask.judulTugas || a.id.includes(targetTask.id))
+        );
+        if (matchTask !== undefined && matchTask.nilai !== undefined && matchTask.nilai !== null) {
+          return matchTask.nilai;
+        }
+
+        // Check tugas_siswa table directly for this task & student
+        const allTs = db.tugasSiswa.getAll();
+        const tsMatch = allTs.find(
+          ts => ts.tugasId === targetTask.id && candidateIds.includes(ts.siswaId) && (ts.score != null || ts.nilai != null)
+        );
+        if (tsMatch) {
+          return tsMatch.score ?? tsMatch.nilai ?? '';
+        }
+      } else {
+        // Fallback: Check general asesmen at index
+        const mapelAsesmens = asesmens.filter(a => candidateIds.includes(a.siswaId) && a.mapelId === mapelId);
+        if (mapelAsesmens[colIndex] && mapelAsesmens[colIndex].nilai != null) {
+          return mapelAsesmens[colIndex].nilai;
+        }
+      }
+    }
+
+    // 3. If checking for Kuis/STS
+    if (colName === 'Kuis/STS') {
+      const studentObj = siswas.find(s => s.id === siswaId);
+      const candidateIds = Array.from(new Set([
+        siswaId,
+        studentObj?.email?.toLowerCase(),
+        studentObj?.nisn
+      ].filter(Boolean) as string[]));
+
+      const stsMatch = asesmens.find(
+        a => candidateIds.includes(a.siswaId) && a.mapelId === mapelId && (a.tipe === 'sts' || a.namaPenilaian === 'Kuis/STS' || a.namaPenilaian.toLowerCase().includes('kuis') || a.namaPenilaian.toLowerCase().includes('sts'))
+      );
+      if (stsMatch !== undefined && stsMatch.nilai !== undefined && stsMatch.nilai !== null) {
+        return stsMatch.nilai;
+      }
+    }
+
+    return '';
   };
 
   // Matrix cell handler (updates state & db in real time)
@@ -97,11 +158,19 @@ export function AsesmenMatrixTable({
     mapelId: string,
     tipe: 'harian' | 'sts' | 'sas',
     namaPenilaian: string,
-    valStr: string
+    valStr: string,
+    colIndex?: number
   ) => {
     const num = parseInt(valStr, 10);
+    const student = siswas.find(s => s.id === siswaId);
+    const candidateIds = Array.from(new Set([
+      siswaId,
+      student?.email?.toLowerCase(),
+      student?.nisn
+    ].filter(Boolean) as string[]));
+
     const existing = asesmens.find(
-      a => a.siswaId === siswaId && a.mapelId === mapelId && a.namaPenilaian === namaPenilaian
+      a => candidateIds.includes(a.siswaId) && a.mapelId === mapelId && a.namaPenilaian === namaPenilaian
     );
 
     if (isNaN(num) || valStr === '') {
@@ -112,20 +181,44 @@ export function AsesmenMatrixTable({
       return;
     }
 
-    const student = siswas.find(s => s.id === siswaId);
+    const cleanScore = Math.min(100, Math.max(0, num));
     const updatedAsesmen: Asesmen = {
       id: existing ? existing.id : `asm-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       siswaId,
       mapelId,
       tipe,
       namaPenilaian,
-      nilai: Math.min(100, Math.max(0, num)),
+      nilai: cleanScore,
       tanggalPenilaian: new Date().toISOString().split('T')[0],
       dinilaiOlehId: loggedInUserId,
       kelas: student?.kelas || activeClassFilter
     };
 
     db.asesmen.upsert(updatedAsesmen);
+
+    // Also update tugas_siswa if there is a matching task at this column index
+    if (colIndex !== undefined && namaPenilaian.startsWith('T')) {
+      const subjectTasks = daftarTugas.filter(t => t.mapelId === mapelId);
+      const targetTask = subjectTasks[colIndex];
+      if (targetTask) {
+        const existingTs = db.tugasSiswa.getAll().find(
+          ts => ts.tugasId === targetTask.id && candidateIds.includes(ts.siswaId)
+        );
+        db.tugasSiswa.upsert({
+          id: existingTs?.id || `ts-${targetTask.id}-${siswaId}`,
+          tugasId: targetTask.id,
+          siswaId: siswaId,
+          statusPengerjaan: true,
+          status: 'SELESAI',
+          score: cleanScore,
+          nilai: cleanScore,
+          submittedAt: existingTs?.submittedAt || new Date().toISOString(),
+          tanggalDikerjakan: existingTs?.tanggalDikerjakan || new Date().toISOString().split('T')[0],
+          umpanBalik: 'Nilai diinput oleh guru dari Tabel Asesmen.'
+        });
+      }
+    }
+
     refreshData();
   };
 
@@ -155,7 +248,7 @@ export function AsesmenMatrixTable({
         let validCount = 0;
 
         for (let i = 1; i <= harianColCount; i++) {
-          const score = getNilaiValue(s.id, m.id, `T${i}`);
+          const score = getNilaiValue(s.id, m.id, `T${i}`, i - 1);
           row[`Nilai Harian T${i}`] = score !== '' ? score : '-';
           if (typeof score === 'number') {
             totalSum += score;
@@ -164,7 +257,7 @@ export function AsesmenMatrixTable({
         }
 
         // Add Kuis / STS Column
-        const kuisScore = getNilaiValue(s.id, m.id, 'Kuis/STS');
+        const kuisScore = getNilaiValue(s.id, m.id, 'Kuis/STS', 99);
         row['Nilai Kuis / Tes'] = kuisScore !== '' ? kuisScore : '-';
         if (typeof kuisScore === 'number') {
           totalSum += kuisScore;
@@ -304,7 +397,7 @@ export function AsesmenMatrixTable({
                         {/* Kolom 3: Nilai Harian (T1, T2, T3, T4, T5, ...) */}
                         {Array.from({ length: harianColCount }).map((_, colIdx) => {
                           const penName = `T${colIdx + 1}`;
-                          const currentVal = getNilaiValue(siswa.id, mapel.id, penName);
+                          const currentVal = getNilaiValue(siswa.id, mapel.id, penName, colIdx);
 
                           return (
                             <td
@@ -317,7 +410,7 @@ export function AsesmenMatrixTable({
                                 max={100}
                                 value={currentVal}
                                 onChange={(e) =>
-                                  handleScoreChange(siswa.id, mapel.id, 'harian', penName, e.target.value)
+                                  handleScoreChange(siswa.id, mapel.id, 'harian', penName, e.target.value, colIdx)
                                 }
                                 placeholder="-"
                                 className="w-12 text-center bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg py-1 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -332,9 +425,9 @@ export function AsesmenMatrixTable({
                             type="number"
                             min={0}
                             max={100}
-                            value={getNilaiValue(siswa.id, mapel.id, 'Kuis/STS')}
+                            value={getNilaiValue(siswa.id, mapel.id, 'Kuis/STS', 99)}
                             onChange={(e) =>
-                              handleScoreChange(siswa.id, mapel.id, 'sts', 'Kuis/STS', e.target.value)
+                              handleScoreChange(siswa.id, mapel.id, 'sts', 'Kuis/STS', e.target.value, 99)
                             }
                             placeholder="-"
                             className="w-14 text-center bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-800 rounded-lg py-1 font-mono text-xs font-bold text-purple-600 dark:text-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-500"

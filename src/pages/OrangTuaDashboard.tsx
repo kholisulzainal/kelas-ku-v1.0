@@ -175,7 +175,19 @@ export function OrangTuaDashboard({ activeTab, parentId }: OrangTuaDashboardProp
             {tasks.filter(t => !t.kelas || t.kelas === childKelas).map((t) => {
               const mapel = subjects.find(m => m.id === t.mapelId);
               const submission = childSubmissions.find(sub => sub.tugasId === t.id);
-              const isCompleted = submission?.statusPengerjaan;
+
+              const candidateIds = Array.from(new Set([
+                currentSiswa?.id,
+                currentSiswa?.email?.toLowerCase(),
+                currentSiswa?.nisn
+              ].filter(Boolean) as string[]));
+
+              const matchPnl = db.penilaian.getAll().find(
+                p => candidateIds.includes(p.siswaId) && (p.id.includes(t.id) || p.namaPenilaian === t.judulTugas)
+              );
+
+              const effectiveScore = submission?.score ?? submission?.nilai ?? matchPnl?.nilai ?? null;
+              const isCompleted = Boolean(submission?.statusPengerjaan || effectiveScore != null);
 
               return (
                 <div
@@ -222,11 +234,11 @@ export function OrangTuaDashboard({ activeTab, parentId }: OrangTuaDashboardProp
                           <p className="flex justify-between border-t border-m3-border dark:border-slate-800 pt-1.5">
                             <span className="text-m3-sec-text">Nilai Diperoleh:</span>
                             <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                              {submission.score != null ? `${submission.score} Poin` : (submission.nilai != null ? `${submission.nilai} Poin` : 'null')}
+                              {effectiveScore != null ? `${effectiveScore} Poin` : 'Menunggu Sinkronisasi Nilai'}
                             </span>
                           </p>
                           <p className="text-[11px] text-m3-sec-text italic mt-1 bg-white dark:bg-slate-900 p-2 rounded-lg border border-m3-border">
-                            Feedback Guru: "{submission.umpanBalik || 'Ananda belajar dengan sangat baik!'}"
+                            Feedback Guru: "{submission?.umpanBalik && !submission.umpanBalik.includes('Menunggu') ? submission.umpanBalik : (effectiveScore != null ? 'Tugas telah dinilai dan disinkronkan ke rapor.' : 'Tugas dikirim. Menunggu sinkronisasi nilai dari Webhook Google Form.')}"
                           </p>
                         </>
                       )}

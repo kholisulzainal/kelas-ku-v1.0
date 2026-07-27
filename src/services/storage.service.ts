@@ -5,7 +5,8 @@ export const BUCKETS = [
   'teachers',
   'students',
   'documents',
-  'downloads',
+  'assignments',
+  'buku_digital',
   'avatars'
 ] as const;
 

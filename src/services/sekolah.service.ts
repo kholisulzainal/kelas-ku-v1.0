@@ -1,9 +1,9 @@
 import { db } from './db';
-import { getSupabaseClient, syncRowToSupabase, pullAllFromSupabase } from './supabase';
+import { getSupabaseClient, syncRowToSupabase } from './supabase';
 import { ProfilSekolah } from '../types';
 
-export const schoolService = {
-  async getProfile(): Promise<ProfilSekolah> {
+export const sekolahService = {
+  async getProfil(): Promise<ProfilSekolah> {
     const client = getSupabaseClient();
     if (client) {
       try {
@@ -32,15 +32,23 @@ export const schoolService = {
           return profile;
         }
       } catch (err) {
-        console.warn('[School Service] Error fetching profile from Supabase:', err);
+        console.warn('[Sekolah Service] Error fetching profile from Supabase:', err);
       }
     }
     return db.profilSekolah.get();
   },
 
-  async updateProfile(profile: ProfilSekolah): Promise<{ success: boolean; error?: string }> {
+  async getProfile(): Promise<ProfilSekolah> {
+    return this.getProfil();
+  },
+
+  async updateProfil(profile: ProfilSekolah): Promise<{ success: boolean; error?: string }> {
     db.profilSekolah.update(profile);
     const res = await syncRowToSupabase('profil_sekolah', profile, true);
     return { success: res.success, error: res.error };
+  },
+
+  async updateProfile(profile: ProfilSekolah): Promise<{ success: boolean; error?: string }> {
+    return this.updateProfil(profile);
   }
 };

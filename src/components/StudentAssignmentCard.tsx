@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Play, RotateCw, CheckCircle2, Clock, Award, FileText, AlertCircle, ExternalLink } from 'lucide-react';
 import { DaftarTugas, AssignmentStatus } from '../types';
-import { assignmentService } from '../services/assignment.service';
+import { db } from '../services/db';
+import { tugasService } from '../services/tugas.service';
 import { EmbeddedGoogleFormModal } from './EmbeddedGoogleFormModal';
 
 interface StudentAssignmentCardProps {
@@ -30,9 +31,27 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   const fetchStatus = async () => {
     setIsLoading(true);
     try {
-      const res = await assignmentService.getStudentAssignmentStatus(task.id, studentId);
+      const res = await tugasService.getStatusTugasSiswa(task.id, studentId);
       setStatus(res.status);
-      setScore(res.score ?? null);
+
+      let resolvedScore = res.score ?? null;
+      if (resolvedScore == null) {
+        const studentObj = db.siswa.getAll().find(s => s.id === studentId);
+        const candidateIds = Array.from(new Set([
+          studentId,
+          studentObj?.email?.toLowerCase(),
+          studentObj?.nisn
+        ].filter(Boolean) as string[]));
+
+        const matchPnl = db.penilaian.getAll().find(
+          p => candidateIds.includes(p.siswaId) && (p.id.includes(task.id) || p.namaPenilaian === task.judulTugas)
+        );
+        if (matchPnl && matchPnl.nilai != null) {
+          resolvedScore = matchPnl.nilai;
+        }
+      }
+
+      setScore(resolvedScore);
       setStartedAt(res.startedAt ?? null);
       setSubmittedAt(res.submittedAt ?? null);
     } catch (err) {
@@ -88,7 +107,7 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
     try {
       setIsSubmitting(true);
       // 1. Save / Insert record with status 'SEDANG_MENGERJAKAN'
-      await assignmentService.startAssignment(task.id, studentId);
+      await tugasService.mulaiTugas(task.id, studentId);
       setStatus('SEDANG_MENGERJAKAN');
       setStartedAt(new Date().toISOString());
       // 2. Buka modal Google Form iframe
@@ -111,7 +130,7 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   const handleConfirmCompletion = async () => {
     try {
       setIsSubmitting(true);
-      const updated = await assignmentService.finishAssignment(task.id, studentId);
+      const updated = await tugasService.selesaiTugas(task.id, studentId);
       setStatus('SELESAI');
       setScore(updated.score ?? updated.nilai ?? null);
       setSubmittedAt(updated.submittedAt || new Date().toISOString());

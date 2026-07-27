@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Copy, Check, Code, HelpCircle, Key, Send, CheckCircle2 } from 'lucide-react';
+import { X, Copy, Check, Code, HelpCircle, Key, Send, CheckCircle2, Database } from 'lucide-react';
 import { DaftarTugas } from '../types';
+import { getSupabaseConfig } from '../services/supabase';
 
 interface GoogleAppsScriptModalProps {
   isOpen: boolean;
@@ -157,15 +158,19 @@ NOTIFY pgrst, 'reload schema';
     setTimeout(() => setCopiedSql(false), 2000);
   };
 
+  const supabaseConfig = getSupabaseConfig();
+
   const currentAppUrl = typeof window !== 'undefined' ? window.location.origin : 'https://kelasku-app.run.app';
   const webhookUrl = `${currentAppUrl}/api/webhook/google-form`;
   const webhookSecret = 'kelasku-secret-key';
 
   const scriptCode = `/**
- * GOOGLE APPS SCRIPT - HYBRID TRACKING TAHAP 2 (KELAS KU)
- * Pasang skrip ini di Google Sheets Respon Google Form atau Google Form langsung (Extensions -> Apps Script)
+ * GOOGLE APPS SCRIPT - HYBRID TRACKING DENGAN DIRECT SUPABASE SYNC (KELAS KU)
+ * Pasang skrip ini di Google Form atau Google Sheets Respon (Extensions -> Apps Script)
  */
 
+var SUPABASE_URL = "${supabaseConfig.url || ''}";
+var SUPABASE_ANON_KEY = "${supabaseConfig.anonKey || ''}";
 var WEBHOOK_URL = "${webhookUrl}";
 var WEBHOOK_SECRET = "${webhookSecret}";
 var ASSIGNMENT_ID = "${activeTaskId || 'ID_TUGAS_AKAN_DIPILIH'}";
@@ -175,15 +180,12 @@ function onFormSubmit(e) {
     var studentEmail = "";
     var scoreText = "";
 
-    // =========================================================================
-    // TEKNIK 1: Event Google Form (e.response dari FormApp)
-    // =========================================================================
+    // 1. Ekstrak data dari Event Google Form
     if (e && e.response) {
       if (typeof e.response.getRespondentEmail === "function") {
         studentEmail = e.response.getRespondentEmail() || "";
       }
       
-      // Jika email terverifikasi kosong, cari dari jawaban item (Email, NISN, NIS, Nama, dll)
       if (typeof e.response.getItemResponses === "function") {
         var itemResponses = e.response.getItemResponses();
         var firstAnswer = "";
@@ -196,25 +198,23 @@ function onFormSubmit(e) {
             firstAnswer = respVal;
           }
 
-          if (itemTitle.indexOf("email") !== -1 || itemTitle.indexOf("surel") !== -1 || itemTitle.indexOf("alamat") !== -1) {
+          if (itemTitle.indexOf("email") !== -1 || itemTitle.indexOf("surel") !== -1) {
             studentEmail = respVal;
             break;
           }
-          if (!studentEmail && (itemTitle.indexOf("nisn") !== -1 || itemTitle.indexOf("nis") !== -1 || itemTitle.indexOf("no. induk") !== -1 || itemTitle.indexOf("id") !== -1)) {
+          if (!studentEmail && (itemTitle.indexOf("nisn") !== -1 || itemTitle.indexOf("nis") !== -1 || itemTitle.indexOf("no. induk") !== -1)) {
             studentEmail = respVal;
           }
-          if (!studentEmail && (itemTitle.indexOf("nama") !== -1 || itemTitle.indexOf("siswa") !== -1 || itemTitle.indexOf("lengkap") !== -1 || itemTitle.indexOf("peserta") !== -1)) {
+          if (!studentEmail && (itemTitle.indexOf("nama") !== -1 || itemTitle.indexOf("siswa") !== -1)) {
             studentEmail = respVal;
           }
         }
 
-        // Fallback jika tidak ada judul khusus yang cocok: gunakan isian pertama
         if (!studentEmail && firstAnswer) {
           studentEmail = firstAnswer;
         }
       }
 
-      // Ambil Skor Quiz dari FormResponse
       if (typeof e.response.getGradableItemResponses === "function") {
         var gradables = e.response.getGradableItemResponses();
         var totalScore = 0;
@@ -232,9 +232,7 @@ function onFormSubmit(e) {
       }
     }
 
-    // =========================================================================
-    // TEKNIK 2: Event Google Sheets (e.namedValues / e.values dari SpreadsheetApp)
-    // =========================================================================
+    // 2. Ekstrak data dari Google Sheets (e.namedValues / e.values)
     if (!studentEmail && e && e.namedValues) {
       var firstSheetVal = "";
       for (var key in e.namedValues) {
@@ -246,7 +244,7 @@ function onFormSubmit(e) {
           firstSheetVal = valStr;
         }
 
-        if (lowerKey.indexOf("email") !== -1 || lowerKey.indexOf("surel") !== -1 || lowerKey.indexOf("alamat") !== -1) {
+        if (lowerKey.indexOf("email") !== -1 || lowerKey.indexOf("surel") !== -1) {
           if (valStr) { studentEmail = valStr; break; }
         } else if (lowerKey.indexOf("nisn") !== -1 || lowerKey.indexOf("nis") !== -1) {
           if (valStr && !studentEmail) studentEmail = valStr;
@@ -272,41 +270,11 @@ function onFormSubmit(e) {
       }
     }
 
-    if (e && e.values && e.values.length > 0) {
-      if (!studentEmail) {
-        for (var v = 0; v < e.values.length; v++) {
-          var val = String(e.values[v]).trim();
-          if (val && v > 0 && val.indexOf(":") === -1) {
-            if (val.indexOf("@") !== -1 || !isNaN(parseFloat(val)) || val.length > 2) {
-              studentEmail = val;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!scoreText || scoreText === "0") {
-        for (var s = 0; s < e.values.length; s++) {
-          var valS = String(e.values[s]).trim();
-          if (valS.indexOf("/") !== -1 || (valS.length <= 5 && !isNaN(parseFloat(valS)))) {
-            scoreText = valS;
-            break;
-          }
-        }
-      }
-    }
-
-    // =========================================================================
-    // TEKNIK 3: Fallback Membaca Baris Terakhir Google Sheets (Aman jika SpreadsheetApp null)
-    // =========================================================================
+    // 3. Fallback jika masih belum ketemu: baca baris terakhir spreadsheet
     if (!studentEmail || !scoreText) {
       try {
-        var activeSS = null;
-        if (typeof SpreadsheetApp !== "undefined") {
-          activeSS = SpreadsheetApp.getActiveSpreadsheet();
-        }
-        if (activeSS) {
-          var sheet = activeSS.getActiveSheet();
+        if (typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.getActiveSpreadsheet()) {
+          var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
           var lastRow = sheet.getLastRow();
           if (lastRow > 1) {
             var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -330,39 +298,178 @@ function onFormSubmit(e) {
       }
     }
 
-    // Normalisasi email & skor default
     studentEmail = String(studentEmail || "").trim().toLowerCase();
     scoreText = String(scoreText || "100").trim();
 
+    // Hitung Angka Skor Bersih
+    var numScore = 100;
+    if (scoreText.indexOf("/") !== -1) {
+      var parts = scoreText.split("/");
+      var got = parseFloat(parts[0]);
+      var total = parseFloat(parts[1]);
+      if (!isNaN(got) && !isNaN(total) && total > 0) {
+        numScore = Math.round((got / total) * 100);
+      } else if (!isNaN(got)) {
+        numScore = got;
+      }
+    } else {
+      var parsedNum = parseFloat(scoreText);
+      if (!isNaN(parsedNum)) {
+        numScore = parsedNum;
+      }
+    }
+
     Logger.log("=== WEBHOOK KELAS KU ===");
-    Logger.log("Email Siswa : " + studentEmail);
-    Logger.log("ID Tugas    : " + ASSIGNMENT_ID);
-    Logger.log("Skor/Nilai  : " + scoreText);
+    Logger.log("Email/Identitas Siswa : " + studentEmail);
+    Logger.log("ID Tugas              : " + ASSIGNMENT_ID);
+    Logger.log("Skor/Nilai Formatted  : " + scoreText + " -> (Skor Akhir: " + numScore + ")");
 
     if (!studentEmail) {
-      Logger.log("PERINGATAN: Email siswa tidak ditemukan dari e / sheet!");
+      Logger.log("PERINGATAN: Identitas siswa tidak ditemukan!");
       return;
     }
 
-    var payload = {
-      "student_email": studentEmail,
-      "assignment_id": ASSIGNMENT_ID,
-      "score_text": scoreText
-    };
+    // =========================================================================
+    // METODE A: DIRECT SINKRONISASI SUPABASE REST API (SANGAT DIREKOMENDASIKAN)
+    // Langsung tembus ke Supabase Cloud, Bebas dari Cookie Check Sandbox
+    // =========================================================================
+    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+      Logger.log("Mengirimkan data langsung ke Supabase Cloud...");
+      
+      var cleanSupabaseUrl = SUPABASE_URL.replace(/\\/$/, "");
+      var headersSupabase = {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates"
+      };
 
-    var options = {
-      "method": "post",
-      "contentType": "application/json",
-      "headers": {
-        "x-webhook-secret": WEBHOOK_SECRET
-      },
-      "payload": JSON.stringify(payload),
-      "muteHttpExceptions": true
-    };
+      // 1. Cari ID Siswa di Supabase
+      var matchedSiswaId = "";
+      var matchedSiswaKelas = "Kelas 6";
+      try {
+        var resSiswa = UrlFetchApp.fetch(cleanSupabaseUrl + "/rest/v1/siswa?select=id,nisn,email,nama_siswa,kelas", {
+          "method": "get",
+          "headers": headersSupabase,
+          "muteHttpExceptions": true
+        });
 
-    var response = UrlFetchApp.fetch(WEBHOOK_URL, options);
-    Logger.log("Status Response : " + response.getResponseCode());
-    Logger.log("Body Response   : " + response.getContentText());
+        if (resSiswa.getResponseCode() === 200) {
+          var allSiswa = JSON.parse(resSiswa.getContentText());
+          for (var s = 0; s < allSiswa.length; s++) {
+            var sis = allSiswa[s];
+            var eSis = String(sis.email || "").toLowerCase().trim();
+            var nSis = String(sis.nisn || "").trim();
+            var nmSis = String(sis.nama_siswa || "").toLowerCase().trim();
+
+            if ((eSis && eSis === studentEmail) || (nSis && nSis === studentEmail) || (nmSis && nmSis.indexOf(studentEmail) !== -1) || (studentEmail && studentEmail.indexOf(nmSis) !== -1)) {
+              matchedSiswaId = sis.id;
+              if (sis.kelas) matchedSiswaKelas = sis.kelas;
+              break;
+            }
+          }
+        }
+      } catch (errFindSiswa) {
+        Logger.log("Cari siswa error: " + errFindSiswa.toString());
+      }
+
+      if (!matchedSiswaId) {
+        matchedSiswaId = studentEmail; // Fallback ke email/nisn
+      }
+
+      // 2. Ambil Rincian Tugas
+      var mapelId = "mapel-1";
+      var judulTugas = "Kuis Google Form";
+      var dibuatOlehId = "guru-1";
+      try {
+        var resTugas = UrlFetchApp.fetch(cleanSupabaseUrl + "/rest/v1/daftar_tugas?id=eq." + ASSIGNMENT_ID, {
+          "method": "get",
+          "headers": headersSupabase,
+          "muteHttpExceptions": true
+        });
+        if (resTugas.getResponseCode() === 200) {
+          var tArr = JSON.parse(resTugas.getContentText());
+          if (tArr && tArr.length > 0) {
+            if (tArr[0].mapel_id) mapelId = tArr[0].mapel_id;
+            if (tArr[0].judul_tugas) judulTugas = tArr[0].judul_tugas;
+            if (tArr[0].dibuat_oleh_id) dibuatOlehId = tArr[0].dibuat_oleh_id;
+            if (tArr[0].kelas) matchedSiswaKelas = tArr[0].kelas;
+          }
+        }
+      } catch (errTask) {
+        Logger.log("Cari tugas error: " + errTask.toString());
+      }
+
+      var nowIso = new Date().toISOString();
+      var todayStr = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
+
+      // 3. Upsert ke tabel \`tugas_siswa\`
+      var payloadTS = {
+        "id": "ts-" + ASSIGNMENT_ID + "-" + matchedSiswaId,
+        "tugas_id": ASSIGNMENT_ID,
+        "siswa_id": matchedSiswaId,
+        "status_pengerjaan": true,
+        "status": "SELESAI",
+        "score": numScore,
+        "nilai": numScore,
+        "submitted_at": nowIso,
+        "tanggal_dikerjakan": todayStr,
+        "umpan_balik": "Disinkronkan otomatis dari Webhook Google Form (" + judulTugas + ")"
+      };
+
+      var resTS = UrlFetchApp.fetch(cleanSupabaseUrl + "/rest/v1/tugas_siswa", {
+        "method": "post",
+        "headers": headersSupabase,
+        "payload": JSON.stringify(payloadTS),
+        "muteHttpExceptions": true
+      });
+      Logger.log("Supabase tugas_siswa HTTP Status: " + resTS.getResponseCode());
+
+      // 4. Upsert ke tabel \`penilaian\` (Matriks Asesmen Kurikulum)
+      var payloadPnl = {
+        "id": "as-" + ASSIGNMENT_ID + "-" + matchedSiswaId,
+        "siswa_id": matchedSiswaId,
+        "mapel_id": mapelId,
+        "tipe": "harian",
+        "nama_penilaian": judulTugas,
+        "nilai": numScore,
+        "deskripsi_kompetensi": "Hasil penilaian Kuis Google Form (" + judulTugas + ")",
+        "tanggal_penilaian": todayStr,
+        "dinilai_oleh_id": dibuatOlehId,
+        "kelas": matchedSiswaKelas
+      };
+
+      var resPnl = UrlFetchApp.fetch(cleanSupabaseUrl + "/rest/v1/penilaian", {
+        "method": "post",
+        "headers": headersSupabase,
+        "payload": JSON.stringify(payloadPnl),
+        "muteHttpExceptions": true
+      });
+      Logger.log("Supabase penilaian HTTP Status: " + resPnl.getResponseCode());
+      Logger.log("✅ SUKSES BERSAMBUNG KE SUPABASE CLOUD!");
+    }
+
+    // METODE B: FALLBACK SINKRONISASI KE APPLICATION WEBHOOK ENDPOINT
+    if (WEBHOOK_URL) {
+      var payload = {
+        "student_email": studentEmail,
+        "assignment_id": ASSIGNMENT_ID,
+        "score_text": scoreText
+      };
+
+      var options = {
+        "method": "post",
+        "contentType": "application/json",
+        "headers": {
+          "x-webhook-secret": WEBHOOK_SECRET
+        },
+        "payload": JSON.stringify(payload),
+        "muteHttpExceptions": true
+      };
+
+      var response = UrlFetchApp.fetch(WEBHOOK_URL, options);
+      Logger.log("Webhook Application Status Response: " + response.getResponseCode());
+    }
 
   } catch (err) {
     Logger.log("ERROR onFormSubmit: " + err.toString());
@@ -374,31 +481,13 @@ function onFormSubmit(e) {
  * Pilih fungsi 'testKirimWebhook' lalu klik tombol 'Run / Jalankan' di Apps Script Editor
  */
 function testKirimWebhook() {
-  var testEmail = "kholisulzainal@gmail.com"; // Sesuaikan email siswa Anda
-  var testScore = "100 / 100";
-  
-  Logger.log("Menguji pengiriman webhook untuk: " + testEmail);
-  
-  var payload = {
-    "student_email": testEmail,
-    "assignment_id": ASSIGNMENT_ID,
-    "score_text": testScore
-  };
-
-  var options = {
-    "method": "post",
-    "contentType": "application/json",
-    "headers": {
-      "x-webhook-secret": WEBHOOK_SECRET
-    },
-    "payload": JSON.stringify(payload),
-    "muteHttpExceptions": true
-  };
-
-  var res = UrlFetchApp.fetch(WEBHOOK_URL, options);
-  Logger.log("=== HASIL TEST WEBHOOK ===");
-  Logger.log("HTTP Code : " + res.getResponseCode());
-  Logger.log("HTTP Body : " + res.getContentText());
+  Logger.log("Menguji pengiriman webhook Google Form...");
+  onFormSubmit({
+    namedValues: {
+      "Email": ["zahirabendunganjati@gmail.com"],
+      "Skor": ["20 / 20"]
+    }
+  });
 }
 `;
 

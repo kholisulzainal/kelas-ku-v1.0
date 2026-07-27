@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- SKEMA DATABASE SUPABASE UNTUK APLIKASI "KELAS KU"
--- Kurikulum Merdeka - Presensi, Nilai, Jadwal, Google Form, & Supabase Storage
+-- Kurikulum Merdeka - Presensi, Nilai, Jadwal, Google Form Webhook, & Storage
 -- ==============================================================================
 
 -- 1. EXTENSIONS
@@ -10,23 +10,17 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- 2. ENUMS & ROLES
 DO $$ BEGIN
     CREATE TYPE user_role AS ENUM ('operator', 'guru_mapel', 'wali_kelas', 'siswa', 'ortu');
-EXCEPTION
-    WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
-DO $$ BEGIN
-    CREATE TYPE status_kehadiran AS ENUM ('hadir', 'sakit', 'izin', 'alfa');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+-- 3. HAPUS TABEL USANG / DEPRECATED
+DROP TABLE IF EXISTS public.student_assignments CASCADE;
+DROP TABLE IF EXISTS public.assignments CASCADE;
+DROP TABLE IF EXISTS public.ppdb CASCADE;
+DROP TABLE IF EXISTS public.news CASCADE;
+DROP TABLE IF EXISTS public.gallery CASCADE;
 
-DO $$ BEGIN
-    CREATE TYPE tipe_asesmen AS ENUM ('harian', 'sts', 'sas', 'kokurikuler');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
-
--- 3. TABEL UTAMA
+-- 4. TABEL UTAMA APLIKASI
 
 -- A. Profil Sekolah
 CREATE TABLE IF NOT EXISTS public.profil_sekolah (
@@ -47,26 +41,12 @@ CREATE TABLE IF NOT EXISTS public.profil_sekolah (
     kabupaten TEXT,
     provinsi TEXT,
     kode_pos TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- B. User Profiles (Integrasi Supabase Auth)
-CREATE TABLE IF NOT EXISTS public.profiles (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email TEXT UNIQUE NOT NULL,
-    nama_lengkap TEXT NOT NULL,
-    role user_role NOT NULL DEFAULT 'guru_mapel',
-    avatar_url TEXT,
-    no_telepon TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- C. Data Guru
+-- B. Data Guru
 CREATE TABLE IF NOT EXISTS public.guru (
     id TEXT PRIMARY KEY DEFAULT ('guru-' || extract(epoch from now())::bigint),
-    profile_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     nip TEXT UNIQUE NOT NULL,
     nama_guru TEXT NOT NULL,
     gelar TEXT,
@@ -77,23 +57,22 @@ CREATE TABLE IF NOT EXISTS public.guru (
     is_wali_kelas BOOLEAN DEFAULT FALSE,
     kelas_wali TEXT,
     google_email TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- D. Data Kelas
+-- C. Data Kelas
 CREATE TABLE IF NOT EXISTS public.data_kelas (
     id TEXT PRIMARY KEY DEFAULT ('kelas-' || extract(epoch from now())::bigint),
     nama_kelas TEXT UNIQUE NOT NULL,
     tingkat INTEGER DEFAULT 4,
     wali_kelas_id TEXT REFERENCES public.guru(id) ON DELETE SET NULL,
     tahun_ajaran TEXT DEFAULT '2025/2026',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- E. Data Siswa
+-- D. Data Siswa
 CREATE TABLE IF NOT EXISTS public.siswa (
     id TEXT PRIMARY KEY DEFAULT ('siswa-' || extract(epoch from now())::bigint),
-    profile_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     nisn TEXT UNIQUE NOT NULL,
     nis TEXT UNIQUE,
     nama_siswa TEXT NOT NULL,
@@ -105,46 +84,47 @@ CREATE TABLE IF NOT EXISTS public.siswa (
     nama_ayah TEXT,
     nama_ibu TEXT,
     no_telepon_ortu TEXT,
+    email TEXT,
     password TEXT NOT NULL DEFAULT 'siswa123',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- F. Data Orang Tua
+-- E. Data Orang Tua
 CREATE TABLE IF NOT EXISTS public.orang_tua (
     id TEXT PRIMARY KEY DEFAULT ('ortu-' || extract(epoch from now())::bigint),
-    profile_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     nama_ortu TEXT NOT NULL,
     siswa_id TEXT REFERENCES public.siswa(id) ON DELETE CASCADE,
     hubungan TEXT DEFAULT 'Ayah/Ibu/Wali',
     no_telepon TEXT,
+    email TEXT,
     password TEXT NOT NULL DEFAULT 'ortu123',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- G. Mata Pelajaran
+-- F. Mata Pelajaran
 CREATE TABLE IF NOT EXISTS public.mata_pelajaran (
     id TEXT PRIMARY KEY DEFAULT ('mapel-' || extract(epoch from now())::bigint),
     kode_mapel TEXT UNIQUE NOT NULL,
     nama_mapel TEXT NOT NULL,
-    kkm INTEGER DEFAULT 75,
+    kkm INTEGER NOT NULL DEFAULT 75,
     guru_pengampu_id TEXT REFERENCES public.guru(id) ON DELETE SET NULL,
     kelas TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- H. Jadwal Pelajaran
+-- G. Jadwal Pelajaran
 CREATE TABLE IF NOT EXISTS public.jadwal_pelajaran (
     id TEXT PRIMARY KEY DEFAULT ('jadwal-' || extract(epoch from now())::bigint),
     mapel_id TEXT REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
-    hari TEXT NOT NULL CHECK (hari IN ('Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu')),
+    hari TEXT NOT NULL,
     jam_mulai TEXT NOT NULL,
     jam_selesai TEXT NOT NULL,
     ruangan TEXT DEFAULT 'Ruang Kelas',
     kelas TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- I. Absensi Siswa
+-- H. Absensi Siswa
 CREATE TABLE IF NOT EXISTS public.absensi (
     id TEXT PRIMARY KEY DEFAULT ('abs-' || extract(epoch from now())::bigint),
     siswa_id TEXT REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
@@ -152,11 +132,11 @@ CREATE TABLE IF NOT EXISTS public.absensi (
     status TEXT NOT NULL,
     keterangan TEXT,
     dicatat_oleh_id TEXT REFERENCES public.guru(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     CONSTRAINT unique_siswa_tanggal UNIQUE (siswa_id, tanggal)
 );
 
--- J. Daftar Tugas (Integrasi Google Form)
+-- I. Daftar Tugas (Integrasi Google Form Webhook)
 CREATE TABLE IF NOT EXISTS public.daftar_tugas (
     id TEXT PRIMARY KEY DEFAULT ('tugas-' || extract(epoch from now())::bigint),
     mapel_id TEXT REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
@@ -167,85 +147,57 @@ CREATE TABLE IF NOT EXISTS public.daftar_tugas (
     tenggat_waktu TEXT,
     dibuat_oleh_id TEXT REFERENCES public.guru(id) ON DELETE SET NULL,
     kelas TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- K. Tugas Siswa (Pengerjaan & Status Google Form)
+-- J. Tugas Siswa (Pengerjaan, Status, & Nilai Webhook Google Form)
 CREATE TABLE IF NOT EXISTS public.tugas_siswa (
     id TEXT PRIMARY KEY DEFAULT ('ts-' || extract(epoch from now())::bigint),
     tugas_id TEXT REFERENCES public.daftar_tugas(id) ON DELETE CASCADE NOT NULL,
     siswa_id TEXT REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
     status_pengerjaan BOOLEAN DEFAULT FALSE,
+    status TEXT DEFAULT 'BELUM_DIKERJAKAN',
+    score NUMERIC,
+    nilai NUMERIC,
+    started_at TIMESTAMP WITH TIME ZONE,
+    submitted_at TIMESTAMP WITH TIME ZONE,
     tanggal_dikerjakan TEXT,
-    nilai INTEGER CHECK (nilai >= 0 AND nilai <= 100),
     umpan_balik TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     CONSTRAINT unique_tugas_siswa UNIQUE (tugas_id, siswa_id)
 );
 
--- J2. Assignments (Hybrid Tracking Tahap 1 - Model UUID)
-CREATE TABLE IF NOT EXISTS public.assignments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    class_id UUID NOT NULL,
-    subject_id UUID NOT NULL,
-    teacher_id UUID NOT NULL,
-    google_form_url TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- K. Penilaian & Asesmen Kurikulum Merdeka (Tangkapan Webhook & Input Guru)
+CREATE TABLE IF NOT EXISTS public.penilaian (
+    id TEXT PRIMARY KEY DEFAULT ('as-' || extract(epoch from now())::bigint),
+    siswa_id TEXT REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
+    mapel_id TEXT REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
+    tipe TEXT NOT NULL DEFAULT 'harian',
+    nama_penilaian TEXT NOT NULL,
+    nilai NUMERIC NOT NULL CHECK (nilai >= 0 AND nilai <= 100),
+    deskripsi_kompetensi TEXT,
+    tanggal_penilaian TEXT NOT NULL,
+    dinilai_oleh_id TEXT REFERENCES public.guru(id) ON DELETE SET NULL,
+    kelas TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- K2. Student Assignments (Hybrid Tracking Tahap 1)
-CREATE TABLE IF NOT EXISTS public.student_assignments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    assignment_id UUID NOT NULL REFERENCES public.assignments(id) ON DELETE CASCADE,
-    student_id UUID NOT NULL,
-    status VARCHAR(50) DEFAULT 'BELUM_DIKERJAKAN' CHECK (status IN ('BELUM_DIKERJAKAN', 'SEDANG_MENGERJAKAN', 'SELESAI')),
-    score NUMERIC(5, 2) DEFAULT NULL,
-    started_at TIMESTAMP WITH TIME ZONE,
-    submitted_at TIMESTAMP WITH TIME ZONE,
-    CONSTRAINT unique_assignment_student UNIQUE (assignment_id, student_id)
-);
-
--- Trigger Auto-Timestamp
-CREATE OR REPLACE FUNCTION public.fn_auto_timestamp_student_assignments()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.status = 'SEDANG_MENGERJAKAN' AND NEW.started_at IS NULL THEN
-        NEW.started_at := NOW();
-    END IF;
-
-    IF NEW.status = 'SELESAI' AND NEW.submitted_at IS NULL THEN
-        NEW.submitted_at := NOW();
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_auto_timestamp_student_assignments ON public.student_assignments;
-
-CREATE TRIGGER trg_auto_timestamp_student_assignments
-BEFORE INSERT OR UPDATE ON public.student_assignments
-FOR EACH ROW
-EXECUTE FUNCTION public.fn_auto_timestamp_student_assignments();
-
--- L. Asesmen / Rekap Nilai Kurikulum Merdeka (Tangkapan Google Form & Manual)
+-- Alias Tabel Asesmen (Mengarah ke skema sama untuk kompatibilitas penuh)
 CREATE TABLE IF NOT EXISTS public.asesmen (
     id TEXT PRIMARY KEY DEFAULT ('as-' || extract(epoch from now())::bigint),
     siswa_id TEXT REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
     mapel_id TEXT REFERENCES public.mata_pelajaran(id) ON DELETE CASCADE,
     tipe TEXT NOT NULL DEFAULT 'harian',
     nama_penilaian TEXT NOT NULL,
-    nilai INTEGER NOT NULL CHECK (nilai >= 0 AND nilai <= 100),
+    nilai NUMERIC NOT NULL CHECK (nilai >= 0 AND nilai <= 100),
     deskripsi_kompetensi TEXT,
     tanggal_penilaian TEXT NOT NULL,
     dinilai_oleh_id TEXT REFERENCES public.guru(id) ON DELETE SET NULL,
     kelas TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- M. Temuan Khusus (Catatan Perilaku Siswa)
+-- L. Temuan Khusus (Catatan Perilaku Siswa)
 CREATE TABLE IF NOT EXISTS public.temuan_khusus (
     id TEXT PRIMARY KEY DEFAULT ('tk-' || extract(epoch from now())::bigint),
     siswa_id TEXT REFERENCES public.siswa(id) ON DELETE CASCADE NOT NULL,
@@ -255,10 +207,10 @@ CREATE TABLE IF NOT EXISTS public.temuan_khusus (
     tindakan_lanjut TEXT,
     dilaporkan_oleh_id TEXT REFERENCES public.guru(id) ON DELETE SET NULL,
     kelas TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- N. Notifikasi Real-Time
+-- M. Notifikasi Real-Time
 CREATE TABLE IF NOT EXISTS public.notifikasi (
     id TEXT PRIMARY KEY DEFAULT ('notif-' || extract(epoch from now())::bigint),
     penerima_role TEXT NOT NULL,
@@ -268,34 +220,10 @@ CREATE TABLE IF NOT EXISTS public.notifikasi (
     tanggal TEXT NOT NULL,
     dibaca BOOLEAN DEFAULT FALSE,
     tugas_id TEXT REFERENCES public.daftar_tugas(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- O. News / Pengumuman Sekolah
-CREATE TABLE IF NOT EXISTS public.news (
-    id TEXT PRIMARY KEY DEFAULT ('news-' || extract(epoch from now())::bigint),
-    judul TEXT NOT NULL,
-    konten TEXT NOT NULL,
-    kategori TEXT DEFAULT 'Pengumuman',
-    penulis TEXT DEFAULT 'Admin',
-    tanggal TEXT,
-    thumbnail_url TEXT,
-    published BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- P. Galeri Kegiatan Sekolah
-CREATE TABLE IF NOT EXISTS public.gallery (
-    id TEXT PRIMARY KEY DEFAULT ('gal-' || extract(epoch from now())::bigint),
-    judul TEXT NOT NULL,
-    deskripsi TEXT,
-    image_url TEXT NOT NULL,
-    kategori TEXT DEFAULT 'Kegiatan',
-    tanggal TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Q. Pengaturan Aplikasi
+-- N. Application Settings
 CREATE TABLE IF NOT EXISTS public.application_settings (
     id TEXT PRIMARY KEY DEFAULT 'app-settings-001',
     theme TEXT DEFAULT 'light',
@@ -306,28 +234,26 @@ CREATE TABLE IF NOT EXISTS public.application_settings (
     vision TEXT,
     mission TEXT,
     welcome_message TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- R. Pendaftaran PPDB
-CREATE TABLE IF NOT EXISTS public.ppdb (
-    id TEXT PRIMARY KEY DEFAULT ('ppdb-' || extract(epoch from now())::bigint),
-    nama_lengkap TEXT NOT NULL,
-    nisn TEXT,
-    jenis_kelamin TEXT DEFAULT 'L',
-    tempat_lahir TEXT,
-    tanggal_lahir TEXT,
-    nama_ayah TEXT,
-    nama_ibu TEXT,
-    no_telepon_ortu TEXT,
-    alamat TEXT,
-    status_pendaftaran TEXT DEFAULT 'Daftar',
-    dokumen_url TEXT,
-    foto_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- O. Buku Digital
+CREATE TABLE IF NOT EXISTS public.buku_digital (
+    id TEXT PRIMARY KEY DEFAULT ('book-' || extract(epoch from now())::bigint),
+    judul TEXT NOT NULL,
+    kelas TEXT NOT NULL DEFAULT 'Kelas 1',
+    kategori_buku TEXT DEFAULT 'buku_siswa',
+    mapel_id TEXT,
+    mapel_nama TEXT NOT NULL,
+    file_url TEXT NOT NULL,
+    cover_url TEXT,
+    deskripsi TEXT,
+    penulis TEXT,
+    uploaded_by TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 4. KONFIGURASI SUPABASE STORAGE BUCKETS (Untuk Permanensi Media & URL Public)
+-- 5. KONFIGURASI SUPABASE STORAGE BUCKETS
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
   ('logos', 'logos', true),
@@ -335,13 +261,11 @@ VALUES
   ('students', 'students', true),
   ('documents', 'documents', true),
   ('assignments', 'assignments', true),
-  ('ppdb', 'ppdb', true),
-  ('gallery', 'gallery', true),
-  ('news', 'news', true),
+  ('buku_digital', 'buku_digital', true),
   ('avatars', 'avatars', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- Kebijakan Akses Public & Authenticated pada Storage Objects
+-- Kebijakan Akses Public Storage
 DROP POLICY IF EXISTS "Public Storage Read Access" ON storage.objects;
 CREATE POLICY "Public Storage Read Access" ON storage.objects
   FOR SELECT USING (true);
@@ -358,57 +282,36 @@ DROP POLICY IF EXISTS "Allow Storage Deletes" ON storage.objects;
 CREATE POLICY "Allow Storage Deletes" ON storage.objects
   FOR DELETE USING (true);
 
--- 5. INDEXES UNTUK PERFORMA
+-- 6. INDEXES PERFORMA
 CREATE INDEX IF NOT EXISTS idx_guru_nip ON public.guru(nip);
 CREATE INDEX IF NOT EXISTS idx_siswa_nisn ON public.siswa(nisn);
 CREATE INDEX IF NOT EXISTS idx_siswa_kelas ON public.siswa(kelas);
 CREATE INDEX IF NOT EXISTS idx_absensi_siswa_tgl ON public.absensi(siswa_id, tanggal);
 CREATE INDEX IF NOT EXISTS idx_tugas_siswa_tugas ON public.tugas_siswa(tugas_id);
 CREATE INDEX IF NOT EXISTS idx_tugas_siswa_siswa ON public.tugas_siswa(siswa_id);
+CREATE INDEX IF NOT EXISTS idx_penilaian_siswa ON public.penilaian(siswa_id);
 CREATE INDEX IF NOT EXISTS idx_asesmen_siswa ON public.asesmen(siswa_id);
 
--- 6. GRANT PERMISSIONS & ROW LEVEL SECURITY (RLS) POLICIES
+-- 7. HAK AKSES & ROW LEVEL SECURITY (RLS)
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA PUBLIC TO anon, authenticated, service_role;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA PUBLIC TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA PUBLIC GRANT ALL ON TABLES TO anon, authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 
--- Aktifkan RLS pada seluruh tabel
-ALTER TABLE public.profil_sekolah ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.guru ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.data_kelas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.siswa ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.orang_tua ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.mata_pelajaran ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.jadwal_pelajaran ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.absensi ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.daftar_tugas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tugas_siswa ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.asesmen ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.temuan_khusus ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notifikasi ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.news ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.gallery ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.application_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.ppdb ENABLE ROW LEVEL SECURITY;
-
--- Kebijakan Akses Berdasarkan Role User:
--- Operator, Guru, Siswa, Orang Tua
 DO $$
 DECLARE
   t text;
 BEGIN
   FOR t IN SELECT unnest(ARRAY[
-    'profil_sekolah','profiles','guru','data_kelas','siswa','orang_tua',
+    'profil_sekolah','guru','data_kelas','siswa','orang_tua',
     'mata_pelajaran','jadwal_pelajaran','absensi','daftar_tugas','tugas_siswa',
-    'asesmen','temuan_khusus','notifikasi','news','gallery','application_settings','ppdb'
+    'penilaian','asesmen','temuan_khusus','notifikasi','application_settings','buku_digital'
   ])
   LOOP
-    EXECUTE format('DROP POLICY IF EXISTS "Public read and write access" ON public.%I', t);
-    EXECUTE format('CREATE POLICY "Public read and write access" ON public.%I FOR ALL USING (true) WITH CHECK (true)', t);
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS "Public access" ON public.%I', t);
+    EXECUTE format('CREATE POLICY "Public access" ON public.%I FOR ALL USING (true) WITH CHECK (true)', t);
   END LOOP;
 END $$;
 
--- Reload schema cache
 NOTIFY pgrst, 'reload schema';
