@@ -54,7 +54,7 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState<string>(() => {
     const role = db.getCurrentUser().role;
     if (role === 'operator') return 'profil_sekolah';
-    if (role === 'guru') return 'absensi';
+    if (role === 'guru') return 'profil_sekolah';
     if (role === 'siswa') return 'siswa_tugas';
     return 'ortu_notif_tugas';
   });
@@ -71,7 +71,7 @@ function MainApp() {
     if (currentRole === 'operator') {
       setActiveTab('profil_sekolah');
     } else if (currentRole === 'guru') {
-      setActiveTab('absensi');
+      setActiveTab('profil_sekolah');
     } else if (currentRole === 'siswa') {
       setActiveTab('siswa_tugas');
     } else {

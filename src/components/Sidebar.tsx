@@ -111,13 +111,13 @@ export function Sidebar({ currentRole, activeTab, setActiveTab }: SidebarProps) 
       <div className="mt-6 border-t border-[#DCE8F7] dark:border-slate-800 pt-4 px-2">
         <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
           <GraduationCap className="w-5 h-5 shrink-0" />
-          <span className="font-bold text-xs tracking-wider">Kelas Ku V1.0</span>
+          <span className="font-bold text-xs tracking-wider">Kelas Ku v1.0</span>
         </div>
         <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
           Aplikasi Pengelolaan Kelas Kurikulum Merdeka &amp; Terintegrasi Google Form.
         </p>
         <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mt-1">
-          Developer : Kholisul Zainal A.S, S.Pd.
+          Pengembang: Kholisul Zainal A.S, S.Pd.
         </p>
       </div>
     </div>

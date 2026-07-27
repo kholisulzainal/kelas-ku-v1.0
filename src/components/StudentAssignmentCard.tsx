@@ -265,16 +265,11 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
           <div className="bg-emerald-100/60 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/40 p-3 rounded-2xl flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300">
             <span className="font-bold flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              Tugas Telah Dikirim & Selesai
+              Tugas Telah Dikirim &amp; Selesai
             </span>
-            <a
-              href={task.googleFormUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] text-m3-purple hover:underline font-semibold flex items-center gap-0.5"
-            >
-              Lihat Form <ExternalLink className="w-3 h-3" />
-            </a>
+            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-200/60 dark:bg-emerald-900/40 px-2.5 py-1 rounded-full">
+              Terkunci (Selesai)
+            </span>
           </div>
         ) : isInProgress ? (
           /* Condition 'SEDANG_MENGERJAKAN': Button "Lanjutkan Mengerjakan" */

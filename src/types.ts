@@ -98,6 +98,8 @@ export interface MataPelajaran {
   kkm: number;
   guruPengampuId?: string; // Relasi ke Guru
   kelas?: string; // Spesifik Kelas
+  kategori?: string;
+  kelompok?: string;
 }
 
 export interface JadwalPelajaran {

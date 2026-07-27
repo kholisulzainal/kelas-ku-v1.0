@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Trash2,
   Download,
+  Upload,
   Award,
   BookOpen,
   Users,
@@ -275,6 +276,87 @@ export function AsesmenMatrixTable({
     XLSX.writeFile(workbook, `DAFTAR_NILAI_EXCEL_${activeClassFilter}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  // Import matrix from Excel
+  const handleImportNilaiExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rows: any[] = XLSX.utils.sheet_to_json(ws);
+
+        if (!rows || rows.length === 0) {
+          alert('File Excel kosong atau format tidak sesuai.');
+          return;
+        }
+
+        let updatedCount = 0;
+        const allSiswas = db.siswa.getAll();
+        const allMapels = db.mataPelajaran.getAll();
+
+        rows.forEach((row) => {
+          const findVal = (keys: string[]) => {
+            const foundKey = Object.keys(row).find(k =>
+              keys.some(candidate => k.toLowerCase().replace(/[\s_:-]/g, '') === candidate.toLowerCase().replace(/[\s_:-]/g, ''))
+            );
+            return foundKey ? row[foundKey] : undefined;
+          };
+
+          const nisn = String(findVal(['nisn', 'nis']) || '').trim();
+          const namaSiswa = String(findVal(['namasiswa', 'nama', 'siswa']) || '').trim();
+          const mapelName = String(findVal(['matapelajaran', 'mapel', 'namamapel']) || '').trim();
+
+          const targetStudent = allSiswas.find(s =>
+            (nisn && s.nisn === nisn) ||
+            (namaSiswa && s.namaSiswa.toLowerCase() === namaSiswa.toLowerCase())
+          );
+
+          const targetMapel = allMapels.find(m =>
+            mapelName && (m.namaMapel.toLowerCase() === mapelName.toLowerCase() || m.kodeMapel.toLowerCase() === mapelName.toLowerCase())
+          );
+
+          if (!targetStudent || !targetMapel) return;
+
+          // Check Harian columns T1, T2, T3...
+          for (let i = 1; i <= 20; i++) {
+            const val = findVal([`nilaihariant${i}`, `t${i}`, `hariant${i}`]);
+            if (val !== undefined && val !== null && val !== '' && val !== '-') {
+              const numVal = parseInt(String(val), 10);
+              if (!isNaN(numVal)) {
+                handleScoreChange(targetStudent.id, targetMapel.id, 'harian', `T${i}`, String(numVal), i - 1);
+                updatedCount++;
+              }
+            }
+          }
+
+          // Check Kuis / STS column
+          const kuisVal = findVal(['nilaikuistes', 'kuistes', 'kuissts', 'kuis', 'sts']);
+          if (kuisVal !== undefined && kuisVal !== null && kuisVal !== '' && kuisVal !== '-') {
+            const numVal = parseInt(String(kuisVal), 10);
+            if (!isNaN(numVal)) {
+              handleScoreChange(targetStudent.id, targetMapel.id, 'sts', 'Kuis/STS', String(numVal), 99);
+              updatedCount++;
+            }
+          }
+        });
+
+        refreshData();
+        setSaveSuccess(`Berhasil mengimpor ${updatedCount} nilai dari file Excel!`);
+        setTimeout(() => setSaveSuccess(''), 4000);
+        window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+      } catch (err: any) {
+        alert('Gagal membaca file Excel Nilai: ' + (err.message || 'Format tidak valid'));
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
   return (
     <div className="space-y-4">
       {/* Header Controls */}
@@ -311,13 +393,24 @@ export function AsesmenMatrixTable({
             <Plus className="w-3.5 h-3.5" /> Kolom Tugas ({harianColCount})
           </button>
 
-          {/* Export Excel Button */}
+          {/* Ekspor Nilai Button */}
           <button
             onClick={exportMatrixExcel}
             className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
           >
-            <Download className="w-4 h-4" /> Export Excel (.xlsx)
+            <Upload className="w-4 h-4" /> Ekspor Nilai
           </button>
+
+          {/* Impor Nilai Button */}
+          <label className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm transition-all">
+            <Download className="w-4 h-4" /> Impor Nilai
+            <input
+              type="file"
+              accept=".xlsx, .xls"
+              onChange={handleImportNilaiExcel}
+              className="hidden"
+            />
+          </label>
         </div>
       </div>
 
@@ -334,10 +427,10 @@ export function AsesmenMatrixTable({
             <thead className="bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-extrabold uppercase tracking-wider">
               <tr className="border-b border-slate-200 dark:border-slate-700">
                 <th className="px-4 py-3 border-r border-slate-200 dark:border-slate-700 min-w-[180px]">
-                  Kolom 1: Nama Siswa
+                  Nama Siswa
                 </th>
-                <th className="px-4 py-3 border-r border-slate-200 dark:border-slate-700 min-w-[150px]">
-                  Kolom 2: Mata Pelajaran
+                <th className="px-4 py-3 border-r border-slate-200 dark:border-slate-700 min-w-[150px] text-left">
+                  Mata Pelajaran
                 </th>
 
                 {/* Kolom 3: Sub-kolom Nilai Harian (T1, T2, T3, T4, T5...) */}
@@ -352,12 +445,12 @@ export function AsesmenMatrixTable({
 
                 {/* Kolom 4: Nilai Kuis / Tes */}
                 <th className="px-3 py-3 text-center border-r border-slate-200 dark:border-slate-700 min-w-[85px] bg-purple-50/60 dark:bg-purple-950/20 text-purple-900 dark:text-purple-300">
-                  Kolom 4: Kuis/Tes
+                  Kuis/Tes
                 </th>
 
                 {/* Kolom 5: Rata-Rata Nilai */}
                 <th className="px-4 py-3 text-center min-w-[100px] bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 font-black">
-                  Kolom 5: Rata-Rata
+                  Rata-Rata
                 </th>
               </tr>
             </thead>
@@ -379,13 +472,23 @@ export function AsesmenMatrixTable({
                         key={`${siswa.id}-${mapel.id}`}
                         className="hover:bg-blue-50/40 dark:hover:bg-slate-800/40 transition-colors"
                       >
-                        {/* Kolom 1: Nama Siswa */}
-                        <td className="px-4 py-2.5 font-bold border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                          <div className="flex flex-col">
-                            <span className="text-xs text-slate-900 dark:text-white">{siswa.namaSiswa}</span>
-                            <span className="text-[10px] text-slate-400">NISN: {siswa.nisn} &bull; {siswa.kelas}</span>
-                          </div>
-                        </td>
+                        {/* Kolom 1: Nama Siswa (Merged RowSpan across all Mapels) */}
+                        {mapelIdx === 0 && (
+                          <td
+                            rowSpan={filteredMapels.length}
+                            className="px-4 py-3 font-bold border-r border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/95 align-top shadow-xs"
+                          >
+                            <div className="flex flex-col sticky top-12">
+                              <span className="text-xs font-black text-slate-900 dark:text-white leading-tight">{siswa.namaSiswa}</span>
+                              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold mt-1">
+                                NISN: {siswa.nisn || '-'}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-medium">
+                                Kelas: {siswa.kelas}
+                              </span>
+                            </div>
+                          </td>
+                        )}
 
                         {/* Kolom 2: Mata Pelajaran */}
                         <td className="px-4 py-2.5 font-semibold border-r border-slate-200 dark:border-slate-800">

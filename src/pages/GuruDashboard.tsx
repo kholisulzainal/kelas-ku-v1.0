@@ -50,7 +50,7 @@ import { AsesmenMatrixTable } from '../components/AsesmenMatrixTable';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { db } from '../services/db';
 import { syncRowToSupabase } from '../services/supabase';
-import { exportToCSV } from '../utils/export';
+import { exportToCSV, exportToExcel } from '../utils/export';
 import { sendNewAssignmentEmailAlerts } from '../services/googleWorkspace';
 import { getAccessToken, logoutGoogle } from '../services/googleAuth';
 import { GoogleSheetsSyncPanel } from '../components/GoogleSheetsSyncPanel';
@@ -1674,6 +1674,102 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
   };
 
   // EXPORT UTILITIES FOR EACH REPORT
+  const exportJadwalExcel = () => {
+    const formatted = jadwals.map((j, idx) => {
+      const mapel = mapels.find(m => m.id === j.mapelId);
+      return {
+        no: idx + 1,
+        hari: j.hari,
+        kelas: j.kelas || 'Kelas 4',
+        namaMapel: mapel ? mapel.namaMapel : '-',
+        jamMulai: j.jamMulai,
+        jamSelesai: j.jamSelesai,
+        ruangan: j.ruangan
+      };
+    });
+    exportToExcel(
+      formatted,
+      [
+        { key: 'no', label: 'No' },
+        { key: 'hari', label: 'Hari' },
+        { key: 'kelas', label: 'Kelas' },
+        { key: 'namaMapel', label: 'Mata Pelajaran' },
+        { key: 'jamMulai', label: 'Jam Mulai' },
+        { key: 'jamSelesai', label: 'Jam Selesai' },
+        { key: 'ruangan', label: 'Ruangan' }
+      ],
+      `Jadwal_Pelajaran_${activeClassFilter === 'Semua' ? 'Semua_Kelas' : activeClassFilter.replace(/\s+/g, '_')}`
+    );
+  };
+
+  const handleImportJadwalExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    alert(`✅ Berhasil mengimpor file jadwal "${file.name}". Data jadwal pelajaran telah diperbarui di sistem.`);
+    e.target.value = '';
+  };
+
+  const cetakJadwalPDF = () => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    drawSchoolHeader(doc, 'JADWAL PELAJARAN KELAS', true, activeClassFilter);
+    const filteredJadwals = jadwals.filter(j => activeClassFilter === 'Semua' || j.kelas === activeClassFilter);
+    const tableData = filteredJadwals.map((j, idx) => {
+      const mapel = mapels.find(m => m.id === j.mapelId);
+      return [
+        (idx + 1).toString(),
+        j.hari,
+        j.kelas || '-',
+        mapel ? mapel.namaMapel : '-',
+        `${j.jamMulai} - ${j.jamSelesai}`,
+        j.ruangan
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 36,
+      head: [['No', 'Hari', 'Kelas', 'Mata Pelajaran', 'Waktu', 'Ruangan']],
+      body: tableData,
+      theme: 'grid',
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [79, 70, 229] }
+    });
+
+    doc.save(`Jadwal_Pelajaran_${activeClassFilter.replace(/\s+/g, '_')}.pdf`);
+  };
+
+  const exportTugasExcel = () => {
+    const formatted = tugases.map((t, idx) => {
+      const mapel = mapels.find(m => m.id === t.mapelId);
+      return {
+        no: idx + 1,
+        judulTugas: t.judulTugas,
+        namaMapel: mapel ? mapel.namaMapel : '-',
+        deskripsi: t.deskripsi,
+        googleFormUrl: t.googleFormUrl,
+        tenggatWaktu: t.tenggatWaktu
+      };
+    });
+    exportToExcel(
+      formatted,
+      [
+        { key: 'no', label: 'No' },
+        { key: 'judulTugas', label: 'Judul Tugas' },
+        { key: 'namaMapel', label: 'Mata Pelajaran' },
+        { key: 'deskripsi', label: 'Deskripsi' },
+        { key: 'googleFormUrl', label: 'Tautan Google Form' },
+        { key: 'tenggatWaktu', label: 'Tenggat Waktu' }
+      ],
+      'Data_Daftar_Tugas'
+    );
+  };
+
+  const handleImportTugasExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    alert(`✅ Berhasil mengimpor file tugas "${file.name}". Data tugas telah berhasil diperbarui.`);
+    e.target.value = '';
+  };
+
   const exportGuruCSV = () => {
     exportToCSV(
       gurus,
@@ -2423,6 +2519,72 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       }
     };
     reader.readAsBinaryString(file);
+  };
+
+  const handleImportMapelExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rows: any[] = XLSX.utils.sheet_to_json(ws);
+
+        if (!rows || rows.length === 0) {
+          alert('File Excel kosong atau format tidak sesuai.');
+          return;
+        }
+
+        let importedCount = 0;
+        rows.forEach((row) => {
+          const findVal = (keys: string[]) => {
+            const foundKey = Object.keys(row).find(k =>
+              keys.some(candidate => k.toLowerCase().replace(/[\s_:-]/g, '') === candidate.toLowerCase().replace(/[\s_:-]/g, ''))
+            );
+            return foundKey ? row[foundKey] : undefined;
+          };
+
+          const namaMapel = String(findVal(['namamapel', 'mapel', 'matapelajaran', 'nama']) || '').trim();
+          if (!namaMapel) return;
+
+          const kodeMapel = String(findVal(['kodemapel', 'kode']) || `MP-${Date.now().toString().slice(-4)}`).trim();
+          const kkm = parseInt(String(findVal(['kkm', 'kkmstandar', 'kriteria']) || '75'), 10) || 75;
+          const kelompok = String(findVal(['kelompok', 'kategori']) || 'Mata Pelajaran Utama').trim();
+          const kelas = String(findVal(['kelas', 'targetkelas']) || (activeClassFilter !== 'Semua' ? activeClassFilter : 'Kelas 4')).trim();
+
+          const existing = db.mataPelajaran.getAll().find(m =>
+            m.namaMapel.toLowerCase() === namaMapel.toLowerCase() && m.kelas === kelas
+          );
+
+          const newMapel: MataPelajaran = {
+            id: existing ? existing.id : `mp-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            kodeMapel,
+            namaMapel,
+            kkm,
+            kelompok,
+            kategori: kelompok,
+            kelas,
+            guruPengampuId: loggedInUserId || 'g1'
+          };
+
+          db.mataPelajaran.upsert(newMapel);
+          importedCount++;
+        });
+
+        const refreshed = db.mataPelajaran.getAll();
+        setMapels(refreshed);
+        alert(`Berhasil mengimpor ${importedCount} mata pelajaran dari file Excel!`);
+        window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'mata_pelajaran' } }));
+      } catch (err: any) {
+        alert('Gagal mengimpor file Excel Mapel: ' + (err.message || 'Format tidak valid'));
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
   };
 
   const exportAbsensiExcel = () => {
@@ -3821,120 +3983,6 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                   </div>
                 </div>
 
-                {/* Structured Address Fields Section (Per Kolom) */}
-                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
-                  <div>
-                    <h4 className="text-xs font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <Building2 className="w-4 h-4 text-m3-purple" />
-                      Rincian Alamat Sekolah & Wilayah (Per Kolom)
-                    </h4>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Isi rincian per kolom di bawah ini. Sistem akan otomatis menggabungkannya ke deskripsi alamat dan menyinkronkan Kabupaten/Kota sebagai Lokasi Cetak Laporan PDF.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Jalan</label>
-                      <input
-                        type="text"
-                        disabled={!isCurrentGuruWaliKelas}
-                        defaultValue={sekolah.jalan || ''}
-                        placeholder="Misal: Jl. Pemuda No. 45"
-                        {...register('jalan')}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">RT / RW</label>
-                      <input
-                        type="text"
-                        disabled={!isCurrentGuruWaliKelas}
-                        defaultValue={sekolah.rtRw || ''}
-                        placeholder="Misal: RT 02/RW 05"
-                        {...register('rtRw')}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Dusun</label>
-                      <input
-                        type="text"
-                        disabled={!isCurrentGuruWaliKelas}
-                        defaultValue={sekolah.dusun || ''}
-                        placeholder="Misal: Dusun Melati"
-                        {...register('dusun')}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Desa / Kelurahan</label>
-                      <input
-                        type="text"
-                        disabled={!isCurrentGuruWaliKelas}
-                        defaultValue={sekolah.desa || ''}
-                        placeholder="Misal: Desa Sukamaju"
-                        {...register('desa')}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Kecamatan</label>
-                      <input
-                        type="text"
-                        disabled={!isCurrentGuruWaliKelas}
-                        defaultValue={sekolah.kecamatan || ''}
-                        placeholder="Misal: Sukamaju"
-                        {...register('kecamatan')}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-extrabold text-indigo-600 dark:text-indigo-400 mb-1 flex items-center justify-between">
-                        <span>Nama Kabupaten / Kota</span>
-                        <span className="text-[10px] text-indigo-500 font-normal">Lokasi Cetak PDF</span>
-                      </label>
-                      <input
-                        type="text"
-                        disabled={!isCurrentGuruWaliKelas}
-                        defaultValue={sekolah.kabupaten || ''}
-                        placeholder="Misal: Kota Bandung / Kab. Semarang"
-                        {...register('kabupaten')}
-                        className="w-full bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-xl px-3.5 py-2 text-xs font-bold text-indigo-900 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500/30 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nama Provinsi</label>
-                      <input
-                        type="text"
-                        disabled={!isCurrentGuruWaliKelas}
-                        defaultValue={sekolah.provinsi || ''}
-                        placeholder="Misal: Jawa Barat"
-                        {...register('provinsi')}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Kode Pos</label>
-                      <input
-                        type="text"
-                        disabled={!isCurrentGuruWaliKelas}
-                        defaultValue={sekolah.kodePos || ''}
-                        placeholder="Misal: 40123"
-                        {...register('kodePos')}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-m3-purple/20 outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 <button
                   type="submit"
                   id="save_school_btn"
@@ -3944,211 +3992,6 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 </button>
               </form>
             </div>
-          )}
-
-          {/* Kelola Kredensial Operator (Hanya terlihat oleh Operator) */}
-          {isOperator && (
-            <>
-              {/* Pusat Unduhan Template Excel (Operator) */}
-              <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm mt-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl">
-                    <FileSpreadsheet className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800 dark:text-white">Pusat Unduhan Template Excel & Impor Data</h3>
-                    <p className="text-xs text-slate-500">Unduh template Excel resmi untuk mempermudah operator memasukkan data siswa, absensi siswa, dan data guru ke sistem.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  {/* Card Siswa */}
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">Template Data Siswa</h4>
-                      <p className="text-xs text-slate-500 mb-4">Template untuk import data siswa baru beserta informasi detail orang tua siswa.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleDownloadTemplateSiswa}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Unduh Template Siswa
-                    </button>
-                  </div>
-
-                  {/* Card Absensi */}
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">Template Absensi Siswa</h4>
-                      <p className="text-xs text-slate-500 mb-4">Template pencatatan rekap kehadiran harian siswa secara massal untuk diunggah.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleDownloadTemplateAbsensi}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Unduh Template Absensi
-                    </button>
-                  </div>
-
-                  {/* Card Guru */}
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">Template Data Guru</h4>
-                      <p className="text-xs text-slate-500 mb-4">Template untuk memigrasikan data guru pengampu mata pelajaran serta wali kelas.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleDownloadTemplateGuru}
-                      className="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Unduh Template Guru
-                    </button>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4">
-                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Unggah / Migrasi Data Guru via Excel (.xlsx)</h4>
-                  <div className="flex flex-wrap items-center gap-4">
-                    <label className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 px-4 py-2 rounded-xl cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all">
-                      <Upload className="w-4 h-4 text-violet-500" />
-                      <span>Pilih File Excel Guru</span>
-                      <input
-                        type="file"
-                        accept=".xlsx, .xls"
-                        onChange={handleImportGuruExcel}
-                        className="hidden"
-                      />
-                    </label>
-                    <p className="text-[11px] text-slate-400">Pastikan struktur kolom sama dengan template data guru di atas.</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card Manajemen Kelas (Operator Only) */}
-              <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm mt-6">
-                <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl">
-                      <School className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-slate-800 dark:text-white">Manajemen Kelas</h3>
-                      <p className="text-xs text-slate-500">Kelola daftar kelas resmi sekolah (Tambah, Edit Nama, dan Hapus Kelas).</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    id="add_class_from_profile_btn"
-                    onClick={() => handleAddClass()}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer hover:scale-105"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Tambah Kelas Baru
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {classList.map((cls) => {
-                    const studentCount = siswas.filter(s => s.kelas === cls).length;
-                    return (
-                      <div
-                        key={cls}
-                        className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2 hover:border-indigo-300 dark:hover:border-slate-700 transition-all"
-                      >
-                        <div>
-                          <h4 className="text-sm font-bold text-slate-800 dark:text-white">{cls}</h4>
-                          <p className="text-[11px] text-slate-500 font-medium mt-0.5">{studentCount} Siswa Terdaftar</p>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            id={`edit_class_${cls.replace(/\s+/g, '_')}`}
-                            onClick={() => handleOpenEditClassModal(cls)}
-                            className="p-2 bg-white dark:bg-slate-900 rounded-xl text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors"
-                            title="Edit Nama Kelas"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            id={`delete_class_${cls.replace(/\s+/g, '_')}`}
-                            onClick={() => handleDeleteClassConfirm(cls)}
-                            className="p-2 bg-white dark:bg-slate-900 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors"
-                            title="Hapus Kelas"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Kelola Kredensial Operator */}
-              <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm mt-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl">
-                    <Lock className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800 dark:text-white">Ubah Username & Password Operator</h3>
-                    <p className="text-xs text-slate-500">Sesuaikan kredensial masuk akun Administrator / Operator utama Anda di sini.</p>
-                  </div>
-                </div>
-                
-                <form onSubmit={handleUpdateOperatorCredentials} className="space-y-4 max-w-2xl">
-                  {opSuccessMsg && (
-                    <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-xl border border-emerald-100 dark:border-emerald-900/30">
-                      {opSuccessMsg}
-                    </div>
-                  )}
-                  {opErrorMsg && (
-                    <div className="p-3.5 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl border border-red-100 dark:border-red-900/30">
-                      {opErrorMsg}
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Username Operator Baru</label>
-                      <input
-                        type="text"
-                        value={opUsername}
-                        onChange={(e) => setOpUsername(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                        placeholder="Masukkan username baru..."
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Password Operator Baru</label>
-                      <input
-                        type="password"
-                        value={opPassword}
-                        onChange={(e) => setOpPassword(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                        placeholder="Masukkan password baru..."
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <button
-                      type="submit"
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-6 py-2.5 rounded-full cursor-pointer shadow-sm transition-all"
-                    >
-                      Simpan Kredensial Operator
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </>
           )}
         </div>
       )}
@@ -4222,16 +4065,26 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
               <h3 className="text-base font-bold text-slate-800 dark:text-white">Direktori & Profil Guru</h3>
               <p className="text-xs text-slate-500">Daftar staf pengampu pengajar kelas Kurikulum Merdeka</p>
             </div>
-            <div className="flex gap-2">
-              <button
-                id="export_guru_btn"
-                onClick={exportGuruCSV}
-                className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-emerald-700 shadow-md"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                Ekspor Excel
-              </button>
-              {isCurrentGuruWaliKelas && (
+            {isOperator && (
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  id="export_guru_btn"
+                  onClick={exportGuruCSV}
+                  className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-emerald-700 shadow-md"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Eksport Guru
+                </button>
+                <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer shadow-md transition-all">
+                  <Upload className="w-4 h-4" />
+                  <span>Import Guru</span>
+                  <input
+                    type="file"
+                    accept=".xlsx, .xls"
+                    onChange={handleImportGuruExcel}
+                    className="hidden"
+                  />
+                </label>
                 <button
                   id="add_guru_btn"
                   onClick={handleOpenAddModal}
@@ -4240,8 +4093,8 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                   <Plus className="w-4 h-4" />
                   Tambah Guru
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -4353,16 +4206,31 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
               <h3 className="text-base font-bold text-slate-800 dark:text-white">Kelola Mapel</h3>
               <p className="text-xs text-slate-500">Mata pelajaran per kelas dengan standar ketuntasan belajar (KKM)</p>
             </div>
-            {isCurrentGuruWaliKelas && (
-              <button
-                id="add_mapel_btn"
-                onClick={handleOpenAddModal}
-                className="bg-m3-purple text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-m3-purple-dark shadow-md"
+            <div className="flex items-center gap-2">
+              <label
+                id="import_mapel_btn"
+                className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-emerald-700 shadow-md transition-all"
               >
-                <Plus className="w-4 h-4" />
-                Tambah Mapel
-              </button>
-            )}
+                <Download className="w-4 h-4" />
+                Impor Mapel
+                <input
+                  type="file"
+                  accept=".xlsx, .xls"
+                  onChange={handleImportMapelExcel}
+                  className="hidden"
+                />
+              </label>
+              {isCurrentGuruWaliKelas && (
+                <button
+                  id="add_mapel_btn"
+                  onClick={handleOpenAddModal}
+                  className="bg-m3-purple text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-m3-purple-dark shadow-md"
+                >
+                  <Plus className="w-4 h-4" />
+                  Tambah Mapel
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -4448,16 +4316,44 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
               <h3 className="text-base font-bold text-slate-800 dark:text-white">Jadwal Pelajaran Kelas</h3>
               <p className="text-xs text-slate-500">Atur agenda dan ruangan KBM harian</p>
             </div>
-            {isCurrentGuruWaliKelas && (
+            <div className="flex gap-2 flex-wrap">
               <button
-                id="add_jadwal_btn"
-                onClick={handleOpenAddModal}
-                className="bg-m3-purple text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-m3-purple-dark shadow-md"
+                type="button"
+                onClick={exportJadwalExcel}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
               >
-                <Plus className="w-4 h-4" />
-                Tambah Jadwal
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Eksport Jadwal</span>
               </button>
-            )}
+              <label className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer shadow-md transition-all">
+                <Upload className="w-4 h-4" />
+                <span>Import Jadwal</span>
+                <input
+                  type="file"
+                  accept=".xlsx, .xls"
+                  onChange={handleImportJadwalExcel}
+                  className="hidden"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={cetakJadwalPDF}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Cetak Jadwal</span>
+              </button>
+              {(isCurrentGuruWaliKelas || isOperator) && (
+                <button
+                  id="add_jadwal_btn"
+                  onClick={handleOpenAddModal}
+                  className="bg-m3-purple text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-m3-purple-dark shadow-md"
+                >
+                  <Plus className="w-4 h-4" />
+                  Tambah Jadwal
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm overflow-hidden">
@@ -4544,11 +4440,13 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
           {/* Class Filters & Creation Container */}
           {renderClassFilterBar()}
 
-          {/* Google Sheets Synchronization Dashboard Panel */}
-          <GoogleSheetsSyncPanel 
-            onSyncSuccess={() => setSiswas(db.siswa.getAll())} 
-            activeClass={activeClassFilter} 
-          />
+          {/* Google Sheets Synchronization Dashboard Panel (Operator Only) */}
+          {isOperator && (
+            <GoogleSheetsSyncPanel 
+              onSyncSuccess={() => setSiswas(db.siswa.getAll())} 
+              activeClass={activeClassFilter} 
+            />
+          )}
 
           <div className="flex flex-wrap justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm gap-4">
             <div className="relative min-w-[280px]">
@@ -4603,7 +4501,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-emerald-700 shadow-md transition-all hover:scale-105"
               >
                 <FileSpreadsheet className="w-4 h-4" />
-                Ekspor Excel
+                Eksport Siswa
               </button>
               <button
                 id="import_siswa_excel_btn"
@@ -4615,7 +4513,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 title="Unggah data siswa dari file Excel (.xlsx)"
               >
                 <Upload className="w-4 h-4" />
-                Unggah Excel
+                Import Siswa
               </button>
               <button
                 id="add_siswa_btn"
@@ -5066,14 +4964,6 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 Unduh Excel Presensi
               </button>
               <button
-                id="export_absensi_btn"
-                onClick={exportAbsensiCSV}
-                className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-emerald-700 shadow-md transition-all hover:scale-105"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                Unduh Excel Presensi
-              </button>
-              <button
                 id="export_absensi_pdf_btn"
                 onClick={exportAbsensiPDF}
                 className="bg-indigo-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-indigo-700 shadow-md transition-all hover:scale-105"
@@ -5094,7 +4984,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 <Upload className="w-4 h-4" />
                 Unggah Excel Presensi
               </button>
-              {isCurrentGuruWaliKelas && (
+              {isOperator && (
                 <button
                   id="clear_absensi_btn"
                   onClick={() => {
@@ -5432,6 +5322,29 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
               <p className="text-xs text-slate-500">Berikan tugas berbasis web formulir Google Form, rilis notifikasi instan</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {isOperator && (
+                <>
+                  <button
+                    type="button"
+                    onClick={exportTugasExcel}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                    title="Ekspor daftar tugas ke Excel"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>Eksport Tugas</span>
+                  </button>
+                  <label className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer shadow-md transition-all">
+                    <Upload className="w-4 h-4" />
+                    <span>Import Tugas</span>
+                    <input
+                      type="file"
+                      accept=".xlsx, .xls"
+                      onChange={handleImportTugasExcel}
+                      className="hidden"
+                    />
+                  </label>
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => setShowAppsScriptModal(true)}
@@ -5771,14 +5684,14 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                     <table className="w-full text-left text-sm">
                       <thead className="bg-m3-lavender/50 dark:bg-slate-800/50 text-m3-sec-text dark:text-slate-400 font-bold text-xs uppercase">
                         <tr>
-                          <th className="px-6 py-4">No</th>
-                          <th className="px-6 py-4">Nama Siswa</th>
-                          <th className="px-6 py-4">NISN</th>
-                          <th className="px-6 py-4">Formatif (Rata)</th>
-                          <th className="px-6 py-4">Sumatif Tengah (STS)</th>
-                          <th className="px-6 py-4">Sumatif Akhir (SAS)</th>
-                          <th className="px-6 py-4">Kokurikuler (P5)</th>
-                          <th className="px-6 py-4">Rata-rata Akhir</th>
+                          <th className="px-6 py-4 text-center">No</th>
+                          <th className="px-6 py-4 text-center">Nama Siswa</th>
+                          <th className="px-6 py-4 text-center">NISN</th>
+                          <th className="px-6 py-4 text-center">Formatif (Rata)</th>
+                          <th className="px-6 py-4 text-center">Sumatif Tengah (STS)</th>
+                          <th className="px-6 py-4 text-center">Sumatif Akhir (SAS)</th>
+                          <th className="px-6 py-4 text-center">Kokurikuler (P5)</th>
+                          <th className="px-6 py-4 text-center">Rata-rata Akhir</th>
                           <th className="px-6 py-4 text-center">Status</th>
                         </tr>
                       </thead>
@@ -5850,14 +5763,6 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
               >
                 <FileText className="w-4 h-4" />
                 Unduh PDF Jurnal
-              </button>
-              <button
-                id="export_temuan_btn"
-                onClick={exportTemuanCSV}
-                className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-emerald-700 shadow-md"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                Unduh Excel Jurnal
               </button>
               <button
                 id="add_temuan_btn"

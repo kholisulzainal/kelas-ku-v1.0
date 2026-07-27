@@ -287,7 +287,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
 
             <div>
               <label htmlFor="username" className="block text-xs font-semibold text-[#1E293B] dark:text-slate-300 mb-1.5">
-                {role === 'operator' && 'Username Operator'}
+                {role === 'operator' && 'Nama Pengguna Operator'}
                 {role === 'guru' && 'NIP / Nama Guru'}
                 {role === 'siswa' && 'NISN / NIS / Nama Siswa'}
                 {role === 'orang_tua' && 'No. Telepon / Nama Orang Tua'}
@@ -454,7 +454,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     className="order-2 sm:order-1 h-[40px] flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 px-4 rounded-[12px] cursor-pointer transition-all"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
-                    Kembali Ke Login
+                    Kembali ke Halaman Masuk
                   </button>
                   <button
                     type="submit"
@@ -467,7 +467,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                         Mengirim...
                       </>
                     ) : (
-                      'Kirim Link Atur Ulang'
+                      'Kirim Tautan Atur Ulang'
                     )}
                   </button>
                 </div>

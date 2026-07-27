@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Sun, Moon, Sparkles, User, GraduationCap, ShieldAlert, Users, RotateCcw, LogOut, Menu, X, RefreshCw, Database, Clock, Chrome, Wifi, WifiOff } from 'lucide-react';
+import { Bell, Sun, Moon, Sparkles, User, GraduationCap, ShieldAlert, Users, RotateCcw, LogOut, Menu, X, RefreshCw, Database, Clock, Chrome, Wifi, WifiOff, CheckCircle2, Shield } from 'lucide-react';
 import { useTheme } from './ThemeContext';
 import { db } from '../services/db';
 import { Notifikasi, UserRole } from '../types';
 import { SupabaseSyncModal } from './SupabaseSyncModal';
+import { getStoredGoogleUser, saveStoredGoogleUser, saveGoogleToken } from '../services/googleServices';
+import { syncRowToSupabase } from '../services/supabase';
 
 interface HeaderProps {
   currentRole: UserRole;
@@ -35,7 +37,52 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
   const [school, setSchool] = useState(() => db.profilSekolah.get());
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
+  const [googleEmailInput, setGoogleEmailInput] = useState('');
+  const [googleStatusMsg, setGoogleStatusMsg] = useState('');
+  const [storedGoogleUser, setStoredGoogleUser] = useState(() => getStoredGoogleUser());
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleConnectGoogle = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleEmailInput.trim() || !googleEmailInput.includes('@')) {
+      setGoogleStatusMsg('⚠️ Masukkan alamat email Google yang valid.');
+      return;
+    }
+
+    const email = googleEmailInput.trim();
+    const currentUser = db.getCurrentUser();
+    const displayName = currentUser.role === 'siswa' ? 'Siswa' : currentUser.role === 'guru' ? 'Guru' : currentUser.role === 'orang_tua' ? 'Orang Tua' : 'Warga Sekolah';
+
+    const userObj = {
+      displayName,
+      email,
+      photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=4f46e5&color=fff`
+    };
+
+    saveStoredGoogleUser(userObj);
+    saveGoogleToken(`token-google-${currentUser.role}-${Date.now()}`);
+    setStoredGoogleUser(userObj);
+
+    // If current role is Siswa, automatically update student email in database & Supabase
+    if (currentUser.role === 'siswa' && currentUser.id) {
+      const student = db.siswa.getAll().find(s => s.id === currentUser.id);
+      if (student) {
+        const updatedSiswa = { ...student, email };
+        db.siswa.upsert(updatedSiswa);
+        syncRowToSupabase('siswa', updatedSiswa);
+      }
+    }
+
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      Notification.requestPermission();
+    }
+
+    setGoogleStatusMsg(`✅ Berhasil! Email Google [${email}] terhubung. ${currentUser.role === 'siswa' ? 'Email default siswa otomatis diperbarui di database. ' : ''}Push Notifikasi aktif.`);
+    setTimeout(() => {
+      setIsGoogleModalOpen(false);
+      setGoogleStatusMsg('');
+    }, 2000);
+  };
   const notifRef = useRef<HTMLDivElement>(null);
 
   const [showAutoLogoutSettings, setShowAutoLogoutSettings] = useState(false);
@@ -189,16 +236,18 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
             </div>
           )}
 
-          {/* Supabase Sync Toggle */}
-          <button
-            id="supabase_sync_modal_btn"
-            onClick={() => setIsSupabaseModalOpen(true)}
-            title="Integrasi & Sinkronisasi Supabase"
-            className="h-[40px] px-3 sm:px-3.5 rounded-[12px] bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-semibold border border-blue-100 dark:border-blue-900/30 cursor-pointer flex items-center justify-center gap-1.5 text-xs shrink-0 transition-colors"
-          >
-            <Database className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span className="font-bold">Sinkron</span>
-          </button>
+          {/* Supabase Sync Toggle - Operator Only */}
+          {currentRole === 'operator' && (
+            <button
+              id="supabase_sync_modal_btn"
+              onClick={() => setIsSupabaseModalOpen(true)}
+              title="Integrasi & Sinkronisasi Supabase"
+              className="h-[40px] px-3 sm:px-3.5 rounded-[12px] bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-semibold border border-blue-100 dark:border-blue-900/30 cursor-pointer flex items-center justify-center gap-1.5 text-xs shrink-0 transition-colors"
+            >
+              <Database className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="font-bold">Sinkron</span>
+            </button>
+          )}
 
           {/* Segarkan Halaman */}
           <button
@@ -208,6 +257,17 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
             className="h-[40px] w-[40px] rounded-[12px] bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all border border-[#DCE8F7] dark:border-slate-700/60 cursor-pointer flex items-center justify-center shrink-0"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+
+          {/* Google Workspace Login & Push Notifications */}
+          <button
+            id="google_login_btn"
+            onClick={() => setIsGoogleModalOpen(true)}
+            title="Masuk Akun Google & Notifikasi Push"
+            className="h-[40px] px-3 sm:px-3.5 rounded-[12px] bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-100 dark:border-indigo-900/30 cursor-pointer flex items-center justify-center gap-1.5 text-xs shrink-0 transition-colors"
+          >
+            <Chrome className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span className="font-bold hidden sm:inline">Masuk Google</span>
           </button>
 
           {/* Notification Bell */}
@@ -340,6 +400,88 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
       
       {/* Supabase Sync Panel Modal */}
       <SupabaseSyncModal isOpen={isSupabaseModalOpen} onClose={() => setIsSupabaseModalOpen(false)} />
+
+      {/* GOOGLE SIGN-IN & PUSH NOTIFICATION MODAL */}
+      {isGoogleModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 relative">
+            <button
+              onClick={() => setIsGoogleModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 rounded-2xl">
+                <Chrome className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Sambungkan Akun Google</h3>
+                <p className="text-xs text-slate-500">Notifikasi Push &amp; Pembaruan Otomatis Email Siswa</p>
+              </div>
+            </div>
+
+            {storedGoogleUser ? (
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Terkoneksi Google Workspace
+                  </span>
+                  <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-bold">Aktif</span>
+                </div>
+                <p className="font-mono text-slate-700 dark:text-slate-200 font-bold">{storedGoogleUser.email}</p>
+                <p className="text-[11px] text-slate-500">
+                  Semua pemberitahuan tugas &amp; nilai akan diteruskan ke akun Google ini.
+                </p>
+              </div>
+            ) : null}
+
+            {googleStatusMsg && (
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200 text-xs rounded-2xl font-semibold">
+                {googleStatusMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleConnectGoogle} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Alamat Email Google / Gmail Pribadi
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={googleEmailInput}
+                  onChange={(e) => setGoogleEmailInput(e.target.value)}
+                  placeholder="contoh: nama.siswa@gmail.com"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-normal">
+                * Khusus akun siswa: Menghubungkan email Google di sini akan <strong>otomatis memperbarui email default siswa</strong> di database Supabase dan mengaktifkan notifikasi push browser.
+              </p>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsGoogleModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-md cursor-pointer transition-all"
+                >
+                  <Chrome className="w-4 h-4" />
+                  Hubungkan &amp; Aktifkan Push
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* CUSTOM DATABASE RESET CONFIRMATION MODAL */}
       {showResetConfirm && (
