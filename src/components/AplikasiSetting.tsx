@@ -512,6 +512,13 @@ export function AplikasiSetting() {
     }
   };
 
+  const [cacheClearMsg, setCacheClearMsg] = useState('');
+  const handleCleanAppCacheAndLogs = () => {
+    db.clearCacheAndLogs();
+    setCacheClearMsg('✅ Cache, log pemberitahuan, dan memori sementara aplikasi berhasil dibersihkan! Beban CPU & memori dioptimalkan.');
+    setTimeout(() => setCacheClearMsg(''), 5000);
+  };
+
   const handleBackupJSON = () => {
     const backupData = {
       profil_sekolah: db.profilSekolah.get(),
@@ -1106,7 +1113,22 @@ export function AplikasiSetting() {
             Pulihkan Database (.JSON)
             <input type="file" accept=".json" onChange={handleRestoreJSON} className="hidden" />
           </label>
+
+          <button
+            onClick={handleCleanAppCacheAndLogs}
+            className="bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-bold text-xs px-4 py-2.5 rounded-2xl flex items-center gap-2 cursor-pointer transition-all shadow-sm border border-rose-200 dark:border-rose-800/50"
+          >
+            <Trash2 className="w-4 h-4" />
+            Bersihkan Cache &amp; Log Chat App (Optimasi CPU)
+          </button>
         </div>
+
+        {cacheClearMsg && (
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-2xl text-xs font-semibold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{cacheClearMsg}</span>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}

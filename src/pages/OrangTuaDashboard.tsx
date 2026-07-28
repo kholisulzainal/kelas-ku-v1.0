@@ -51,11 +51,17 @@ export function OrangTuaDashboard({ activeTab, parentId }: OrangTuaDashboardProp
 
     sync();
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') sync();
+    };
+
     window.addEventListener('supabase-data-updated', sync);
-    const interval = setInterval(sync, 4000); // larger interval fallback
+    document.addEventListener('visibilitychange', handleVisibility);
+    const interval = setInterval(sync, 30000); // 30s fallback interval
 
     return () => {
       window.removeEventListener('supabase-data-updated', sync);
+      document.removeEventListener('visibilitychange', handleVisibility);
       clearInterval(interval);
     };
   }, [targetSiswaId]);

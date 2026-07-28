@@ -63,8 +63,23 @@ export function NotificationCenter({ isOpen, onClose, currentRole, currentUserId
     };
 
     loadData();
-    const interval = setInterval(loadData, 2000);
-    return () => clearInterval(interval);
+
+    window.addEventListener('supabase-data-updated', loadData);
+    window.addEventListener('notifikasi-updated', loadData);
+    window.addEventListener('storage', loadData);
+
+    // Only run periodic background check if modal is open, at 20 seconds
+    let interval: any = null;
+    if (isOpen) {
+      interval = setInterval(loadData, 20000);
+    }
+
+    return () => {
+      window.removeEventListener('supabase-data-updated', loadData);
+      window.removeEventListener('notifikasi-updated', loadData);
+      window.removeEventListener('storage', loadData);
+      if (interval) clearInterval(interval);
+    };
   }, [isOpen, currentRole, currentUserId]);
 
   // Calculations:

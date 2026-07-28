@@ -859,6 +859,34 @@ export const db = {
       const list = db.notifikasi.getAll();
       const updated = list.map(n => n.penerimaRole === role ? { ...n, dibaca: true } : n);
       db.notifikasi.save(updated);
+    },
+    clearAll: () => {
+      db.notifikasi.save([]);
+      localStorage.removeItem('notifikasi');
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'notifikasi' } }));
+      window.dispatchEvent(new CustomEvent('notifikasi-updated'));
+    }
+  },
+
+  // Helper Pembersih Cache & Performance Optimizer
+  clearCacheAndLogs: () => {
+    try {
+      // Clear accumulated notifications & logs
+      localStorage.setItem('notifikasi', '[]');
+      
+      // Clear non-essential temp cache keys
+      const tempKeys = ['temp_form_submission', 'draft_quiz', 'exambrowser_state', 'active_session_cache'];
+      tempKeys.forEach(k => localStorage.removeItem(k));
+
+      // Trigger custom update events to refresh views and release memory
+      window.dispatchEvent(new CustomEvent('notifikasi-updated'));
+      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'all' } }));
+
+      console.log('✅ [Cache Optimizer] Cleaned up temporary logs, notification cache, and browser storage.');
+      return true;
+    } catch (e) {
+      console.warn('[Cache Optimizer Error]:', e);
+      return false;
     }
   },
 

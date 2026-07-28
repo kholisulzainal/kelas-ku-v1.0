@@ -50,7 +50,11 @@ export function AutoLogoutManager({ onLogout }: AutoLogoutManagerProps) {
     }
 
     const resetActivity = () => {
-      lastActivityRef.current = Date.now();
+      const now = Date.now();
+      // Throttle activity updates to once every 5 seconds to reduce CPU overhead
+      if (now - lastActivityRef.current > 5000) {
+        lastActivityRef.current = now;
+      }
       if (showWarning) {
         setShowWarning(false);
       }

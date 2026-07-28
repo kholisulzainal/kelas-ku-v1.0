@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, CheckCircle2, Lock, AlertTriangle, Maximize2, ShieldAlert } from 'lucide-react';
+import { X, CheckCircle2, FileText, ExternalLink } from 'lucide-react';
 
 interface EmbeddedGoogleFormModalProps {
   isOpen: boolean;
@@ -23,85 +23,6 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
   onConfirmFinish,
   isSubmitting = false
 }) => {
-  const [warningCount, setWarningCount] = useState<number>(0);
-  const [showWarningAlert, setShowWarningAlert] = useState<boolean>(false);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setWarningCount(0);
-      setShowWarningAlert(false);
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
-      return;
-    }
-
-    // Try requesting fullscreen safely
-    try {
-      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-      } else if (document.fullscreenElement) {
-        setIsFullscreen(true);
-      }
-    } catch {
-      // Ignore if browser restricts fullscreen without direct gesture
-    }
-
-    const handleFullscreenChange = () => {
-      if (!document.fullscreenElement && isOpen) {
-        setIsFullscreen(false);
-      } else if (document.fullscreenElement) {
-        setIsFullscreen(true);
-      }
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-
-    let blurTimer: NodeJS.Timeout | null = null;
-
-    const handleBlurOrHide = () => {
-      // Delay slightly to check if focus moved to embedded Google Form iframe
-      if (blurTimer) clearTimeout(blurTimer);
-      blurTimer = setTimeout(() => {
-        // If activeElement is IFRAME or document still has focus, user is just clicking options in Google Form
-        const activeElem = document.activeElement;
-        const isIframeClick = activeElem && activeElem.tagName === 'IFRAME';
-        
-        if (isIframeClick) {
-          // User clicked inside Google Form iframe to choose an answer -> DO NOT trigger warning
-          return;
-        }
-
-        // Only count as cheating if user actually switched tabs/windows outside the browser
-        if (document.hidden || (!document.hasFocus() && !isIframeClick)) {
-          setWarningCount(prev => prev + 1);
-          setShowWarningAlert(true);
-        }
-      }, 250);
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        setWarningCount(prev => prev + 1);
-        setShowWarningAlert(true);
-      }
-    };
-
-    window.addEventListener('blur', handleBlurOrHide);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      if (blurTimer) clearTimeout(blurTimer);
-      window.removeEventListener('blur', handleBlurOrHide);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
-    };
-  }, [isOpen]);
-
   if (!isOpen) return null;
 
   // Format Google Form URL for seamless embedding
@@ -122,8 +43,8 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
   return (
     <AnimatePresence>
       <div 
-        className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-lg pointer-events-auto select-none"
-        onContextMenu={(e) => e.preventDefault()}
+        className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md"
+        onClick={onClose}
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -131,24 +52,21 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
           transition={{ duration: 0.2 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative z-[101] bg-white dark:bg-slate-900 border-2 border-amber-500/30 rounded-3xl shadow-2xl w-full max-w-6xl h-[94vh] flex flex-col overflow-hidden pointer-events-auto"
+          className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-6xl h-[92vh] flex flex-col overflow-hidden"
         >
-          {/* Header Bar - Exam Browser Style */}
-          <div className="px-5 py-3 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white border-b border-slate-700/80 flex items-center justify-between gap-3 shrink-0 relative z-10">
+          {/* Header Bar */}
+          <div className="px-5 py-3 bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white border-b border-slate-700 flex items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shrink-0 shadow-inner">
-                <Lock className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0">
+                <FileText className="w-5 h-5" />
               </div>
               <div className="truncate">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30 shrink-0">
-                    Exambrowser Ujian
-                  </span>
-                  <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Layar Terkunci Otomatis
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-500/30 shrink-0">
+                    Lembar Tugas Siswa
                   </span>
                 </div>
-                <h3 className="text-sm sm:text-base font-black text-white truncate mt-0.5">
+                <h3 className="text-sm sm:text-base font-bold text-white truncate mt-0.5">
                   {taskTitle} &bull; <span className="text-slate-300 font-semibold">{subjectName || 'Mata Pelajaran'}</span>
                 </h3>
               </div>
@@ -156,12 +74,25 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
 
             {/* Controls */}
             <div className="flex items-center gap-2 shrink-0">
+              {googleFormUrl && (
+                <a
+                  href={googleFormUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hidden sm:flex items-center gap-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl transition-all border border-slate-700"
+                  title="Buka di Tab Baru"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Buka Tab Baru
+                </a>
+              )}
+
               {onConfirmFinish && (
                 <button
                   type="button"
                   onClick={onConfirmFinish}
                   disabled={isSubmitting}
-                  className="flex items-center gap-1.5 text-xs font-black bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 px-4 py-2 rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
+                  className="flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95 px-4 py-2 rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   {isSubmitting ? 'Memproses...' : 'Tandai Selesai'}
@@ -170,45 +101,14 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
 
               <button
                 type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onClose();
-                }}
-                className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ml-1 border border-slate-700"
-                title="Tutup Kuis"
-                aria-label="Tutup Kuis"
+                onClick={onClose}
+                className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 border border-slate-700 ml-1"
+                title="Tutup Modal"
+                aria-label="Tutup Modal"
               >
                 <X className="w-5 h-5 pointer-events-none" />
               </button>
             </div>
-          </div>
-
-          {/* Exam Warning / Violation Notice Banner */}
-          {warningCount > 0 && showWarningAlert && (
-            <div className="bg-red-600 text-white px-5 py-2.5 border-b border-red-700 text-xs font-bold flex items-center justify-between gap-2 shrink-0 animate-pulse">
-              <span className="flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 shrink-0 text-amber-300" />
-                <strong>PERINGATAN EXAM BROWSER ({warningCount}x):</strong> Anda terdeteksi meninggalkan layar/pindah tab! Dilarang berpindah aplikasi saat kuis berlangsung.
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowWarningAlert(false)}
-                className="bg-white/20 hover:bg-white/30 text-white text-[11px] px-2.5 py-1 rounded-lg font-bold"
-              >
-                Saya Mengerti
-              </button>
-            </div>
-          )}
-
-          {/* Instructions Banner */}
-          <div className="bg-amber-50 dark:bg-amber-950/40 px-5 py-2 border-b border-amber-200/80 dark:border-amber-900/40 text-[11px] text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2 shrink-0">
-            <span>🔒 <strong>Anti-Curang Active:</strong> Kerjakan formulir langsung di dalam kotak ujian ini. Dilarang membuka tab baru/browsing. Setelah selesai, klik tombol <strong>"Tandai Selesai"</strong>.</span>
-            {warningCount > 0 && (
-              <span className="font-extrabold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-950/60 px-2 py-0.5 rounded-full border border-red-200">
-                Peringatan: {warningCount}x Left Window
-              </span>
-            )}
           </div>
 
           {/* Embedded Iframe */}
@@ -216,7 +116,7 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
             {embedUrl ? (
               <iframe
                 src={embedUrl}
-                title={`Exambrowser Google Form - ${taskTitle}`}
+                title={`Google Form - ${taskTitle}`}
                 className="w-full h-full border-0 rounded-b-3xl"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 loading="lazy"

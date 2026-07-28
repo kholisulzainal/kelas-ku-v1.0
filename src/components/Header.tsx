@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Sun, Moon, Sparkles, User, GraduationCap, ShieldAlert, Users, RotateCcw, LogOut, Menu, X, RefreshCw, Database, Clock, Chrome, Wifi, WifiOff, CheckCircle2, Shield } from 'lucide-react';
+import { Bell, Sun, Moon, Sparkles, User, GraduationCap, ShieldAlert, Users, RotateCcw, LogOut, Menu, X, RefreshCw, Database, Clock, Chrome, Wifi, WifiOff, CheckCircle2, Shield, Trash2 } from 'lucide-react';
 import { useTheme } from './ThemeContext';
 import { db } from '../services/db';
 import { Notifikasi, UserRole } from '../types';
@@ -135,7 +135,7 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
   }, []);
 
   useEffect(() => {
-    // Poll notifications
+    // Event-driven notifications update
     const updateNotifs = () => {
       const allNotifs = db.notifikasi.getAll();
       const filtered = allNotifs.filter(n => n.penerimaRole === currentRole);
@@ -143,8 +143,20 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
     };
 
     updateNotifs();
-    const interval = setInterval(updateNotifs, 2000);
-    return () => clearInterval(interval);
+
+    window.addEventListener('supabase-data-updated', updateNotifs);
+    window.addEventListener('notifikasi-updated', updateNotifs);
+    window.addEventListener('storage', updateNotifs);
+
+    // Relaxed fallback interval (25 seconds) to minimize CPU usage
+    const interval = setInterval(updateNotifs, 25000);
+
+    return () => {
+      window.removeEventListener('supabase-data-updated', updateNotifs);
+      window.removeEventListener('notifikasi-updated', updateNotifs);
+      window.removeEventListener('storage', updateNotifs);
+      clearInterval(interval);
+    };
   }, [currentRole]);
 
   const unreadCount = notifs.filter(n => !n.dibaca).length;
@@ -152,6 +164,14 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
   const handleMarkAllRead = () => {
     db.notifikasi.markAllAsRead(currentRole);
     setNotifs(prev => prev.map(n => ({ ...n, dibaca: true })));
+  };
+
+  const [cacheClearMsg, setCacheClearMsg] = useState('');
+  const handleClearCacheAndLogs = () => {
+    db.clearCacheAndLogs();
+    setNotifs([]);
+    setCacheClearMsg('✅ Cache & Log Chat/Pemberitahuan berhasil dibersihkan! CPU & Memory dioptimalkan.');
+    setTimeout(() => setCacheClearMsg(''), 4000);
   };
 
   return (
@@ -304,6 +324,12 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
                   )}
                 </div>
 
+                {cacheClearMsg && (
+                  <div className="mb-2 p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-[10px] text-emerald-700 dark:text-emerald-300 font-medium">
+                    {cacheClearMsg}
+                  </div>
+                )}
+
                 <div className="max-h-64 overflow-y-auto space-y-2 custom-scrollbar pr-0.5">
                   {notifs.length > 0 ? (
                     notifs.map((n) => (
@@ -332,6 +358,16 @@ export function Header({ currentRole, currentUserId, onRoleChange, onLogout, onT
                       <p className="text-xs">Tidak ada pemberitahuan baru</p>
                     </div>
                   )}
+                </div>
+
+                <div className="pt-2.5 mt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                  <button
+                    onClick={handleClearCacheAndLogs}
+                    className="w-full py-1.5 px-3 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-colors border border-rose-200 dark:border-rose-900/30"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Bersihkan Cache & Log Chat
+                  </button>
                 </div>
               </div>
             )}
