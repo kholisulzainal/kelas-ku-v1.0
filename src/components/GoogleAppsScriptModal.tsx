@@ -24,8 +24,9 @@ export const GoogleAppsScriptModal: React.FC<GoogleAppsScriptModalProps> = ({
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'script' | 'sql'>('script');
+  const [activeTab, setActiveTab] = useState<'script' | 'form_generator' | 'sql'>('script');
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
+  const [copiedFormGen, setCopiedFormGen] = useState<boolean>(false);
 
   const sqlMigrationCode = `-- =========================================================================
 -- SQL MIGRASI & REFACTOR LENGKAP SUPABASE (VERSI TERBARU APLIKASI)
@@ -159,6 +160,195 @@ NOTIFY pgrst, 'reload schema';
   };
 
   const supabaseConfig = getSupabaseConfig();
+  const activeTask = tasks.find(t => t.id === activeTaskId) || selectedTask || tasks[0];
+  const taskTitle = activeTask?.judulTugas || 'Asesmen Google Form';
+
+  const formGeneratorCode = `/**
+ * GOOGLE APPS SCRIPT - GENERATOR GOOGLE FORM OTOMATIS + AUTO-WEBHOOK (KELAS KU)
+ * 
+ * CARA MENGGUNAKAN DENGAN SANGAT MUDAH:
+ * 1. Buka browser dan ketik link: https://script.new (Otomatis membuka Apps Script baru)
+ * 2. Hapus seluruh kode bawaan di editor 'Kode.gs' (Ctrl + A lalu Delete).
+ * 3. Tempelkan (Paste) seluruh kode skrip ini ke 'Kode.gs'.
+ * 4. Di bagian toolbar atas, pastikan fungsi terpilih adalah 'buatGoogleFormOtomatis'.
+ * 5. Klik tombol "Jalankan" (Run) ▶️.
+ * 6. Berikan Izin / Otorisasi Google Account jika diminta.
+ * 7. Selesai! Google Form kuis baru & Pemicu Webhook otomatis dibuat di Google Drive Anda!
+ */
+
+function buatGoogleFormOtomatis() {
+  var JUDUL_TUGAS = ${JSON.stringify(taskTitle)};
+  var ASSIGNMENT_ID = ${JSON.stringify(activeTaskId)};
+  var SUPABASE_URL = ${JSON.stringify(supabaseConfig.url || '')};
+  var SUPABASE_ANON_KEY = ${JSON.stringify(supabaseConfig.anonKey || '')};
+
+  Logger.log("=== MEMULAI GENERATOR GOOGLE FORM KELAS KU ===");
+
+  // 1. Buat Google Form Kuis Baru
+  var form = FormApp.create("[KELAS KU] " + JUDUL_TUGAS);
+  form.setDescription("Silakan isi identitas diri Anda dengan benar dan jawab seluruh soal kuis di bawah ini.");
+  form.setIsQuiz(true); // Aktifkan Kuis & Scoring Otomatis
+  form.setAllowResponseEdits(false);
+
+  // 2. Tambahkan Pertanyaan Identitas Wajib (Mencegah Salah Identitas)
+  var itemNama = form.addTextItem();
+  itemNama.setTitle("Nama Lengkap Siswa").setRequired(true);
+
+  var itemEmail = form.addTextItem();
+  itemEmail.setTitle("Email atau ID Siswa").setRequired(true);
+
+  var itemNisn = form.addTextItem();
+  itemNisn.setTitle("NISN / Nomor Induk").setRequired(false);
+
+  var itemKelas = form.addTextItem();
+  itemKelas.setTitle("Kelas").setRequired(false);
+
+  // 3. Tambahkan Soal Kuis Draf (Anda Bisa Mengedit / Menambah Soal di Google Form)
+  var q1 = form.addMultipleChoiceItem();
+  q1.setTitle("Soal 1: Berapakah hasil dari 25 + 75?")
+    .setChoices([
+      q1.createChoice("90", false),
+      q1.createChoice("100", true), // Jawaban Benar
+      q1.createChoice("110", false)
+    ])
+    .setPoints(50)
+    .setRequired(true);
+
+  var q2 = form.addMultipleChoiceItem();
+  q2.setTitle("Soal 2: Pancasila sila ke-1 berbunyi?")
+    .setChoices([
+      q2.createChoice("Kemanusiaan yang adil dan beradab", false),
+      q2.createChoice("Ketuhanan Yang Maha Esa", true), // Jawaban Benar
+      q2.createChoice("Persatuan Indonesia", false)
+    ])
+    .setPoints(50)
+    .setRequired(true);
+
+  var editUrl = form.getEditUrl();
+  var pubUrl = form.getPublishedUrl();
+
+  Logger.log("--------------------------------------------------");
+  Logger.log("✅ GOOGLE FORM BERHASIL DIBUAT!");
+  Logger.log("📌 Link Editor Form (Untuk Guru): " + editUrl);
+  Logger.log("📌 Link Pengerjaan (Untuk Siswa): " + pubUrl);
+  Logger.log("--------------------------------------------------");
+
+  // 4. Pasang Pemicu (Trigger) Webhook Otomatis saat Form Di-Submit
+  try {
+    ScriptApp.newTrigger("onFormSubmitOtomatis")
+      .forForm(form)
+      .onFormSubmit()
+      .create();
+    Logger.log("✅ PEMICU WEBHOOK OTOMATIS BERHASIL DIPASANG!");
+  } catch (errTrigger) {
+    Logger.log("Peringatan Pemicu: " + errTrigger.toString());
+  }
+}
+
+/**
+ * FUNGSI OTOMATIS SINKRONISASI KE SUPABASE SAAT SISWA SUBMIT FORM
+ */
+function onFormSubmitOtomatis(e) {
+  var ASSIGNMENT_ID = ${JSON.stringify(activeTaskId)};
+  var SUPABASE_URL = ${JSON.stringify(supabaseConfig.url || '')};
+  var SUPABASE_ANON_KEY = ${JSON.stringify(supabaseConfig.anonKey || '')};
+
+  if (!e || !e.response) return;
+
+  var response = e.response;
+  var studentEmail = "";
+  var totalScore = 0;
+
+  // 1. Hitung Nilai Kuis Otomatis dari Google Form
+  var gradable = response.getGradableItemResponses();
+  for (var g = 0; g < gradable.length; g++) {
+    totalScore += (gradable[g].getScore() || 0);
+  }
+
+  // 2. Ambil Identitas Siswa dari Jawaban Form
+  var items = response.getItemResponses();
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var title = item.getItem().getTitle().toLowerCase();
+    var val = String(item.getResponse() || "").trim();
+
+    if (val && !studentEmail) {
+      if (title.indexOf("email") !== -1 || title.indexOf("id") !== -1 || title.indexOf("nama") !== -1 || title.indexOf("nisn") !== -1) {
+        studentEmail = val;
+      }
+    }
+  }
+
+  if (!studentEmail && items.length > 0) {
+    studentEmail = String(items[0].getResponse() || "").trim();
+  }
+
+  if (!studentEmail) return;
+
+  var finalScore = Math.round(totalScore);
+
+  // 3. Kirimkan Langsung ke Supabase REST API
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    var cleanUrl = SUPABASE_URL.replace(/\\/$/, "");
+    var headers = {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+      "Content-Type": "application/json",
+      "Prefer": "resolution=merge-duplicates"
+    };
+
+    var matchedSiswaId = "";
+    try {
+      var resSiswa = UrlFetchApp.fetch(cleanUrl + "/rest/v1/siswa?select=id,nisn,email,nama_siswa", {
+        "method": "get",
+        "headers": headers,
+        "muteHttpExceptions": true
+      });
+
+      if (resSiswa.getResponseCode() === 200) {
+        var listSiswa = JSON.parse(resSiswa.getContentText());
+        var search = String(studentEmail).toLowerCase().trim();
+
+        for (var s = 0; s < listSiswa.length; s++) {
+          var sis = listSiswa[s];
+          if (sis.email && sis.email.toLowerCase().trim() === search) { matchedSiswaId = sis.id; break; }
+          if (sis.id && sis.id.toLowerCase().trim() === search) { matchedSiswaId = sis.id; break; }
+          if (sis.nisn && sis.nisn.toLowerCase().trim() === search) { matchedSiswaId = sis.id; break; }
+          if (sis.nama_siswa && sis.nama_siswa.toLowerCase().trim() === search) { matchedSiswaId = sis.id; break; }
+        }
+      }
+    } catch (eFind) {}
+
+    if (!matchedSiswaId) matchedSiswaId = studentEmail;
+
+    var payload = {
+      "id": "ts-" + ASSIGNMENT_ID + "-" + matchedSiswaId,
+      "tugas_id": ASSIGNMENT_ID,
+      "siswa_id": matchedSiswaId,
+      "score": finalScore,
+      "nilai": finalScore,
+      "status": "SELESAI",
+      "status_pengerjaan": true,
+      "submitted_at": new Date().toISOString()
+    };
+
+    UrlFetchApp.fetch(cleanUrl + "/rest/v1/tugas_siswa", {
+      "method": "post",
+      "headers": headers,
+      "payload": JSON.stringify(payload),
+      "muteHttpExceptions": true
+    });
+
+    Logger.log("✅ Hasil Kuis Terisi di Supabase! Siswa: " + matchedSiswaId + " Nilai: " + finalScore);
+  }
+}
+`;
+
+  const handleCopyFormGen = () => {
+    navigator.clipboard.writeText(formGeneratorCode);
+    setCopiedFormGen(true);
+    setTimeout(() => setCopiedFormGen(false), 2000);
+  };
 
   const currentAppUrl = typeof window !== 'undefined' ? window.location.origin : 'https://kelasku-app.run.app';
   const webhookUrl = `${currentAppUrl}/api/webhook/google-form`;
@@ -167,13 +357,14 @@ NOTIFY pgrst, 'reload schema';
   const scriptCode = `/**
  * GOOGLE APPS SCRIPT - HYBRID TRACKING DENGAN DIRECT SUPABASE SYNC (KELAS KU)
  * Pasang skrip ini di Google Form atau Google Sheets Respon (Extensions -> Apps Script)
+ * PENTING: Hapus SEMUA kode bawaan di 'Kode.gs' sebelum menempelkan (paste) kode ini.
  */
 
-var SUPABASE_URL = "${supabaseConfig.url || ''}";
-var SUPABASE_ANON_KEY = "${supabaseConfig.anonKey || ''}";
-var WEBHOOK_URL = "${webhookUrl}";
-var WEBHOOK_SECRET = "${webhookSecret}";
-var ASSIGNMENT_ID = "${activeTaskId || 'ID_TUGAS_AKAN_DIPILIH'}";
+var SUPABASE_URL = ${JSON.stringify(supabaseConfig.url || '')};
+var SUPABASE_ANON_KEY = ${JSON.stringify(supabaseConfig.anonKey || '')};
+var WEBHOOK_URL = ${JSON.stringify(webhookUrl)};
+var WEBHOOK_SECRET = ${JSON.stringify(webhookSecret)};
+var ASSIGNMENT_ID = ${JSON.stringify(activeTaskId || 'ID_TUGAS_AKAN_DIPILIH')};
 
 function onFormSubmit(e) {
   try {
@@ -183,7 +374,8 @@ function onFormSubmit(e) {
     // 1. Ekstrak data dari Event Google Form
     if (e && e.response) {
       if (typeof e.response.getRespondentEmail === "function") {
-        studentEmail = e.response.getRespondentEmail() || "";
+        var respEmail = e.response.getRespondentEmail();
+        if (respEmail) studentEmail = respEmail;
       }
       
       if (typeof e.response.getItemResponses === "function") {
@@ -191,22 +383,25 @@ function onFormSubmit(e) {
         var firstAnswer = "";
 
         for (var i = 0; i < itemResponses.length; i++) {
-          var itemTitle = itemResponses[i].getItem().getTitle().toLowerCase();
-          var respVal = String(itemResponses[i].getResponse() || "").trim();
+          var itemObj = itemResponses[i];
+          var itemTitle = itemObj.getItem().getTitle().toLowerCase();
+          var respVal = String(itemObj.getResponse() || "").trim();
 
-          if (!firstAnswer && respVal) {
-            firstAnswer = respVal;
-          }
+          if (respVal) {
+            if (!firstAnswer && itemTitle.indexOf("skor") === -1 && itemTitle.indexOf("score") === -1 && itemTitle.indexOf("nilai") === -1 && itemTitle.indexOf("waktu") === -1 && itemTitle.indexOf("timestamp") === -1 && itemTitle.indexOf("kelas") === -1) {
+              firstAnswer = respVal;
+            }
 
-          if (itemTitle.indexOf("email") !== -1 || itemTitle.indexOf("surel") !== -1) {
-            studentEmail = respVal;
-            break;
-          }
-          if (!studentEmail && (itemTitle.indexOf("nisn") !== -1 || itemTitle.indexOf("nis") !== -1 || itemTitle.indexOf("no. induk") !== -1)) {
-            studentEmail = respVal;
-          }
-          if (!studentEmail && (itemTitle.indexOf("nama") !== -1 || itemTitle.indexOf("siswa") !== -1)) {
-            studentEmail = respVal;
+            if (itemTitle.indexOf("email") !== -1 || itemTitle.indexOf("surel") !== -1) {
+              studentEmail = respVal;
+              break;
+            }
+            if (!studentEmail && (itemTitle.indexOf("nisn") !== -1 || itemTitle.indexOf("nis") !== -1 || itemTitle.indexOf("no. induk") !== -1 || itemTitle.indexOf("no. absen") !== -1)) {
+              studentEmail = respVal;
+            }
+            if (!studentEmail && (itemTitle.indexOf("nama") !== -1 || itemTitle.indexOf("siswa") !== -1 || itemTitle.indexOf("student") !== -1 || itemTitle.indexOf("identitas") !== -1)) {
+              studentEmail = respVal;
+            }
           }
         }
 
@@ -232,7 +427,7 @@ function onFormSubmit(e) {
       }
     }
 
-    // 2. Ekstrak data dari Google Sheets (e.namedValues / e.values)
+    // 2. Ekstrak data dari Google Sheets / Trigger Spreadsheet (e.namedValues / e.values)
     if (!studentEmail && e && e.namedValues) {
       var firstSheetVal = "";
       for (var key in e.namedValues) {
@@ -240,16 +435,19 @@ function onFormSubmit(e) {
         var valArr = e.namedValues[key];
         var valStr = (valArr && valArr.length > 0 && valArr[0]) ? String(valArr[0]).trim() : "";
 
-        if (!firstSheetVal && valStr && lowerKey.indexOf("timestamp") === -1 && lowerKey.indexOf("waktu") === -1) {
-          firstSheetVal = valStr;
-        }
+        if (valStr) {
+          if (!firstSheetVal && lowerKey.indexOf("timestamp") === -1 && lowerKey.indexOf("waktu") === -1 && lowerKey.indexOf("skor") === -1 && lowerKey.indexOf("score") === -1 && lowerKey.indexOf("nilai") === -1 && lowerKey.indexOf("kelas") === -1) {
+            firstSheetVal = valStr;
+          }
 
-        if (lowerKey.indexOf("email") !== -1 || lowerKey.indexOf("surel") !== -1) {
-          if (valStr) { studentEmail = valStr; break; }
-        } else if (lowerKey.indexOf("nisn") !== -1 || lowerKey.indexOf("nis") !== -1) {
-          if (valStr && !studentEmail) studentEmail = valStr;
-        } else if (lowerKey.indexOf("nama") !== -1 || lowerKey.indexOf("siswa") !== -1) {
-          if (valStr && !studentEmail) studentEmail = valStr;
+          if (lowerKey.indexOf("email") !== -1 || lowerKey.indexOf("surel") !== -1) {
+            studentEmail = valStr;
+            break;
+          } else if (lowerKey.indexOf("nisn") !== -1 || lowerKey.indexOf("nis") !== -1) {
+            if (!studentEmail) studentEmail = valStr;
+          } else if (lowerKey.indexOf("nama") !== -1 || lowerKey.indexOf("siswa") !== -1) {
+            if (!studentEmail) studentEmail = valStr;
+          }
         }
       }
       if (!studentEmail && firstSheetVal) {
@@ -270,32 +468,55 @@ function onFormSubmit(e) {
       }
     }
 
-    // 3. Fallback jika masih belum ketemu: baca baris terakhir spreadsheet
-    if (!studentEmail || !scoreText) {
-      try {
-        if (typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.getActiveSpreadsheet()) {
-          var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-          var lastRow = sheet.getLastRow();
-          if (lastRow > 1) {
-            var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-            var rowData = sheet.getRange(lastRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+    // 3. Fallback jika e.values digunakan (Spreadsheet Row values)
+    if (!studentEmail && e && e.values && e.values.length > 0) {
+      for (var v = 0; v < e.values.length; v++) {
+        var rawV = String(e.values[v] || "").trim();
+        if (rawV && rawV.indexOf("/") === -1 && rawV.indexOf(":") === -1) {
+          if (rawV.indexOf("@") !== -1 || !studentEmail) {
+            studentEmail = rawV;
+            if (rawV.indexOf("@") !== -1) break;
+          }
+        }
+      }
+    }
 
-            for (var col = 0; col < headers.length; col++) {
-              var h = String(headers[col]).toLowerCase();
-              var d = String(rowData[col]).trim();
+    // 4. Fallback & Full Scan Spreadsheet
+    try {
+      if (typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.getActiveSpreadsheet()) {
+        var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+        var lastRow = sheet.getLastRow();
+        var lastCol = sheet.getLastColumn();
 
-              if (!studentEmail && (h.indexOf("email") !== -1 || h.indexOf("nama") !== -1 || h.indexOf("nisn") !== -1 || d.indexOf("@") !== -1)) {
-                studentEmail = d;
+        if (lastRow > 1 && lastCol > 0) {
+          var allValues = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+          var headers = allValues[0];
+
+          if (!studentEmail || !scoreText) {
+            var targetRowIndex = lastRow - 1;
+            var rowData = allValues[targetRowIndex];
+
+            for (var c = 0; c < lastCol; c++) {
+              var colHeader = String(headers[c] || "").toLowerCase();
+              var cellVal = String(rowData[c] || "").trim();
+
+              if (!studentEmail && cellVal) {
+                if (colHeader.indexOf("id") !== -1 || colHeader.indexOf("siswa") !== -1 || colHeader.indexOf("nisn") !== -1 || colHeader.indexOf("email") !== -1 || colHeader.indexOf("nama") !== -1 || cellVal.indexOf("@") !== -1) {
+                  studentEmail = cellVal;
+                }
               }
-              if (!scoreText && (h.indexOf("skor") !== -1 || h.indexOf("score") !== -1 || h.indexOf("nilai") !== -1)) {
-                scoreText = d;
+
+              if ((!scoreText || scoreText === "0") && cellVal) {
+                if (colHeader.indexOf("skor") !== -1 || colHeader.indexOf("score") !== -1 || colHeader.indexOf("nilai") !== -1 || cellVal.indexOf("/") !== -1) {
+                  scoreText = cellVal;
+                }
               }
             }
           }
         }
-      } catch (sheetErr) {
-        Logger.log("Info fallback sheet: " + sheetErr.toString());
       }
+    } catch (sheetErr) {
+      Logger.log("Info fallback sheet: " + sheetErr.toString());
     }
 
     studentEmail = String(studentEmail || "").trim().toLowerCase();
@@ -320,23 +541,17 @@ function onFormSubmit(e) {
     }
 
     Logger.log("=== WEBHOOK KELAS KU ===");
-    Logger.log("Email/Identitas Siswa : " + studentEmail);
+    Logger.log("Email/Identitas Siswa : " + (studentEmail || "(Tidak terdeteksi, menggunakan auto-match)"));
     Logger.log("ID Tugas              : " + ASSIGNMENT_ID);
     Logger.log("Skor/Nilai Formatted  : " + scoreText + " -> (Skor Akhir: " + numScore + ")");
 
-    if (!studentEmail) {
-      Logger.log("PERINGATAN: Identitas siswa tidak ditemukan!");
-      return;
-    }
-
     // =========================================================================
-    // METODE A: DIRECT SINKRONISASI SUPABASE REST API (SANGAT DIREKOMENDASIKAN)
-    // Langsung tembus ke Supabase Cloud, Bebas dari Cookie Check Sandbox
+    // METODE A: DIRECT SINKRONISASI SUPABASE REST API
     // =========================================================================
     if (SUPABASE_URL && SUPABASE_ANON_KEY) {
       Logger.log("Mengirimkan data langsung ke Supabase Cloud...");
       
-      var cleanSupabaseUrl = SUPABASE_URL.replace(/\\/$/, "");
+      var cleanSupabaseUrl = SUPABASE_URL.endsWith('/') ? SUPABASE_URL.slice(0, -1) : SUPABASE_URL;
       var headersSupabase = {
         "apikey": SUPABASE_ANON_KEY,
         "Authorization": "Bearer " + SUPABASE_ANON_KEY,
@@ -344,9 +559,10 @@ function onFormSubmit(e) {
         "Prefer": "resolution=merge-duplicates"
       };
 
-      // 1. Cari ID Siswa di Supabase
       var matchedSiswaId = "";
-      var matchedSiswaKelas = "Kelas 6";
+      var matchedSiswaKelas = "Kelas 4";
+
+      // 1. Cari ID Siswa di Supabase dengan Prioritas Utama
       try {
         var resSiswa = UrlFetchApp.fetch(cleanSupabaseUrl + "/rest/v1/siswa?select=id,nisn,email,nama_siswa,kelas", {
           "method": "get",
@@ -356,16 +572,48 @@ function onFormSubmit(e) {
 
         if (resSiswa.getResponseCode() === 200) {
           var allSiswa = JSON.parse(resSiswa.getContentText());
-          for (var s = 0; s < allSiswa.length; s++) {
-            var sis = allSiswa[s];
-            var eSis = String(sis.email || "").toLowerCase().trim();
-            var nSis = String(sis.nisn || "").trim();
-            var nmSis = String(sis.nama_siswa || "").toLowerCase().trim();
+          
+          if (studentEmail && allSiswa && allSiswa.length > 0) {
+            var searchStr = String(studentEmail).toLowerCase().trim();
 
-            if ((eSis && eSis === studentEmail) || (nSis && nSis === studentEmail) || (nmSis && nmSis.indexOf(studentEmail) !== -1) || (studentEmail && studentEmail.indexOf(nmSis) !== -1)) {
-              matchedSiswaId = sis.id;
-              if (sis.kelas) matchedSiswaKelas = sis.kelas;
-              break;
+            // Prioritas 1: Matching persis ID Siswa (e.g., "siswa-1")
+            for (var s1 = 0; s1 < allSiswa.length; s1++) {
+              var sis1 = allSiswa[s1];
+              var idSis1 = String(sis1.id || "").toLowerCase().trim();
+              if (idSis1 && (idSis1 === searchStr || searchStr.indexOf(idSis1) !== -1 || idSis1.indexOf(searchStr) !== -1)) {
+                matchedSiswaId = sis1.id;
+                if (sis1.kelas) matchedSiswaKelas = sis1.kelas;
+                break;
+              }
+            }
+
+            // Prioritas 2: Matching NISN jika ID belum ketemu
+            if (!matchedSiswaId) {
+              for (var s2 = 0; s2 < allSiswa.length; s2++) {
+                var sis2 = allSiswa[s2];
+                var nSis2 = String(sis2.nisn || "").trim();
+                if (nSis2 && (nSis2 === searchStr || searchStr.indexOf(nSis2) !== -1)) {
+                  matchedSiswaId = sis2.id;
+                  if (sis2.kelas) matchedSiswaKelas = sis2.kelas;
+                  break;
+                }
+              }
+            }
+
+            // Prioritas 3: Matching Email atau Nama Siswa
+            if (!matchedSiswaId) {
+              for (var s3 = 0; s3 < allSiswa.length; s3++) {
+                var sis3 = allSiswa[s3];
+                var eSis3 = String(sis3.email || "").toLowerCase().trim();
+                var nmSis3 = String(sis3.nama_siswa || "").toLowerCase().trim();
+
+                if ((eSis3 && (eSis3 === searchStr || searchStr.indexOf(eSis3) !== -1)) || 
+                    (nmSis3 && (nmSis3 === searchStr || nmSis3.indexOf(searchStr) !== -1 || searchStr.indexOf(nmSis3) !== -1))) {
+                  matchedSiswaId = sis3.id;
+                  if (sis3.kelas) matchedSiswaKelas = sis3.kelas;
+                  break;
+                }
+              }
             }
           }
         }
@@ -373,9 +621,17 @@ function onFormSubmit(e) {
         Logger.log("Cari siswa error: " + errFindSiswa.toString());
       }
 
-      if (!matchedSiswaId) {
-        matchedSiswaId = studentEmail; // Fallback ke email/nisn
+      // Jika identitas siswa tidak terdeteksi, hentikan agar tidak salah menaruh nilai ke siswa acak
+      if (!matchedSiswaId && studentEmail) {
+        matchedSiswaId = studentEmail; // Gunakan email/nama raw yang diisi siswa
       }
+
+      if (!matchedSiswaId) {
+        Logger.log("PERINGATAN ABORT: Identitas siswa (Email/NISN/Nama) tidak ditemukan di Google Form / Supabase. Nilai tidak dikirim untuk mencegah salah sasaran.");
+        return;
+      }
+
+      Logger.log("Siswa Terhubung untuk Penilaian: " + matchedSiswaId + " (" + matchedSiswaKelas + ")");
 
       // 2. Ambil Rincian Tugas
       var mapelId = "mapel-1";
@@ -403,7 +659,7 @@ function onFormSubmit(e) {
       var nowIso = new Date().toISOString();
       var todayStr = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
 
-      // 3. Upsert ke tabel \`tugas_siswa\`
+      // 3. Upsert ke tabel tugas_siswa
       var payloadTS = {
         "id": "ts-" + ASSIGNMENT_ID + "-" + matchedSiswaId,
         "tugas_id": ASSIGNMENT_ID,
@@ -425,7 +681,7 @@ function onFormSubmit(e) {
       });
       Logger.log("Supabase tugas_siswa HTTP Status: " + resTS.getResponseCode());
 
-      // 4. Upsert ke tabel \`penilaian\` (Matriks Asesmen Kurikulum)
+      // 4. Upsert ke tabel penilaian (Matriks Asesmen Kurikulum)
       var payloadPnl = {
         "id": "as-" + ASSIGNMENT_ID + "-" + matchedSiswaId,
         "siswa_id": matchedSiswaId,
@@ -485,7 +741,7 @@ function testKirimWebhook() {
   onFormSubmit({
     namedValues: {
       "Email": ["zahirabendunganjati@gmail.com"],
-      "Skor": ["20 / 20"]
+      "Skor": ["100 / 100"]
     }
   });
 }
@@ -611,35 +867,62 @@ function testKirimWebhook() {
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex border-b border-slate-200 dark:border-slate-800 gap-2 pb-1">
+            <div className="flex flex-wrap border-b border-slate-200 dark:border-slate-800 gap-2 pb-1">
               <button
                 type="button"
                 onClick={() => setActiveTab('script')}
-                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
                   activeTab === 'script'
                     ? 'bg-m3-purple text-white shadow-xs'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
                 }`}
               >
                 <Code className="w-3.5 h-3.5" />
-                <span>1. Google Apps Script Webhook</span>
+                <span>1. Webhook Form/Sheet Terpasang</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('form_generator')}
+                className={`px-3.5 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'form_generator'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>✨ 2. Generator Google Form Otomatis</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setActiveTab('sql')}
-                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
                   activeTab === 'sql'
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
                 }`}
               >
                 <Key className="w-3.5 h-3.5" />
-                <span>2. SQL Migrasi Supabase (Email & ID)</span>
+                <span>3. SQL Migrasi Supabase</span>
               </button>
             </div>
 
             {activeTab === 'script' ? (
               <>
+                {/* Important Paste Tip */}
+                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-2xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                  <div className="font-extrabold flex items-center gap-1.5">
+                    <span className="text-amber-600 dark:text-amber-400">💡</span>
+                    <span>Petunjuk Mengatasi Error &quot;SyntaxError: Unexpected number baris: 1&quot;:</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-0.5 text-[11px] opacity-90 pl-1">
+                    <li>Buka Google Apps Script editor di Google Form / Sheet.</li>
+                    <li><strong>Hapus seluruh kode bawaan</strong> di file <code className="bg-amber-100 dark:bg-amber-900/60 px-1 rounded">Kode.gs</code> (tekan <kbd className="font-mono bg-amber-200/60 dark:bg-amber-800/80 px-1 rounded">Ctrl + A</kbd> lalu <kbd className="font-mono bg-amber-200/60 dark:bg-amber-800/80 px-1 rounded">Delete</kbd>) hingga bersih.</li>
+                    <li>Klik tombol <strong>&quot;Salin Kode Skrip&quot;</strong> di bawah ini, lalu tempelkan (<kbd className="font-mono bg-amber-200/60 dark:bg-amber-800/80 px-1 rounded">Ctrl + V</kbd>) ke <code className="bg-amber-100 dark:bg-amber-900/60 px-1 rounded">Kode.gs</code>.</li>
+                  </ol>
+                </div>
+
                 {/* Script Code Block */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -737,6 +1020,43 @@ function testKirimWebhook() {
                   </ol>
                 </div>
               </>
+            ) : activeTab === 'form_generator' ? (
+              /* Automatic Google Form Generator Script Tab */
+              <div className="space-y-4">
+                <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-extrabold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                      <Database className="w-4 h-4 text-amber-600" /> Skrip Generator Google Form Otomatis (Membuat Form Baru)
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={handleCopyFormGen}
+                      className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                    >
+                      {copiedFormGen ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedFormGen ? 'Tersalin!' : 'Salin Skrip Generator'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                    Skrip ini secara **otomatis membuatkan Google Form Kuis baru** yang sudah dikonfigurasi lengkap dengan kolom Identitas Siswa (Nama, Email/ID, NISN), Mode Kuis (Scoring), dan **Auto-Webhook pemicu** ke aplikasi ini dalam sekali klik!
+                  </p>
+                </div>
+
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60 rounded-xl text-xs space-y-1">
+                  <span className="font-extrabold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                    🚀 Cara Penggunaan Tercepat (3 Langkah Mudah):
+                  </span>
+                  <ol className="list-decimal list-inside text-[11px] text-indigo-900 dark:text-indigo-300 space-y-1 pl-1">
+                    <li>Buka tab baru di browser Anda dan ketik: <a href="https://script.new" target="_blank" rel="noopener noreferrer" className="underline font-bold text-indigo-600 dark:text-indigo-400">script.new</a></li>
+                    <li>Hapus seluruh kode bawaan di <code className="bg-indigo-100 dark:bg-indigo-900/60 px-1 rounded">Kode.gs</code>, lalu <strong>Tempel (Paste)</strong> kode skrip di bawah ini.</li>
+                    <li>Klik tombol <strong>▶️ Jalankan (Run)</strong> pada fungsi <code className="font-mono font-bold bg-indigo-100 dark:bg-indigo-900/60 px-1 rounded">buatGoogleFormOtomatis</code>. Google Form baru beserta Webhook-nya langsung jadi di Google Drive Anda!</li>
+                  </ol>
+                </div>
+
+                <pre className="p-4 bg-slate-950 text-amber-300 rounded-2xl text-[11px] font-mono overflow-x-auto max-h-64 border border-slate-800 leading-relaxed">
+                  {formGeneratorCode}
+                </pre>
+              </div>
             ) : (
               /* SQL Migration Tab */
               <div className="space-y-4">

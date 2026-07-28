@@ -1550,6 +1550,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       kelas: classToAssign
     };
     db.daftarTugas.upsert(item);
+    syncRowToSupabase('daftar_tugas', item, true).catch(err => console.warn('Supabase task sync error:', err));
     setTugases(db.daftarTugas.getAll());
     setTugasSiswa(db.tugasSiswa.getAll());
     setShowFormModal(false);
@@ -4072,12 +4073,12 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                   onClick={exportGuruCSV}
                   className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-emerald-700 shadow-md"
                 >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  Eksport Guru
+                  <Upload className="w-4 h-4" />
+                  Ekspor Guru
                 </button>
                 <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer shadow-md transition-all">
-                  <Upload className="w-4 h-4" />
-                  <span>Import Guru</span>
+                  <Download className="w-4 h-4" />
+                  <span>Impor Guru</span>
                   <input
                     type="file"
                     accept=".xlsx, .xls"
@@ -4322,12 +4323,12 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 onClick={exportJadwalExcel}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
               >
-                <FileSpreadsheet className="w-4 h-4" />
-                <span>Eksport Jadwal</span>
+                <Upload className="w-4 h-4" />
+                <span>Ekspor Jadwal</span>
               </button>
               <label className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer shadow-md transition-all">
-                <Upload className="w-4 h-4" />
-                <span>Import Jadwal</span>
+                <Download className="w-4 h-4" />
+                <span>Impor Jadwal</span>
                 <input
                   type="file"
                   accept=".xlsx, .xls"
@@ -4500,8 +4501,8 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 onClick={exportSiswaCSV}
                 className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-emerald-700 shadow-md transition-all hover:scale-105"
               >
-                <FileSpreadsheet className="w-4 h-4" />
-                Eksport Siswa
+                <Upload className="w-4 h-4" />
+                Ekspor Siswa
               </button>
               <button
                 id="import_siswa_excel_btn"
@@ -4512,8 +4513,8 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer shadow-md transition-all hover:scale-105"
                 title="Unggah data siswa dari file Excel (.xlsx)"
               >
-                <Upload className="w-4 h-4" />
-                Import Siswa
+                <Download className="w-4 h-4" />
+                Impor Siswa
               </button>
               <button
                 id="add_siswa_btn"
@@ -4960,7 +4961,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 className="bg-teal-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-teal-700 shadow-md transition-all hover:scale-105"
                 title="Ekspor rekapitulasi kehadiran bulanan ke format Excel (.xlsx)"
               >
-                <FileSpreadsheet className="w-4 h-4" />
+                <Upload className="w-4 h-4" />
                 Unduh Excel Presensi
               </button>
               <button
@@ -4981,7 +4982,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 className="bg-violet-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-violet-700 shadow-md transition-all hover:scale-105"
                 title="Unggah data kehadiran siswa dari file Excel (.xlsx)"
               >
-                <Upload className="w-4 h-4" />
+                <Download className="w-4 h-4" />
                 Unggah Excel Presensi
               </button>
               {isOperator && (
@@ -5752,7 +5753,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                 className="bg-teal-600 text-white px-4 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-teal-700 shadow-md"
                 title="Ekspor jurnal temuan format Excel (.xlsx)"
               >
-                <FileSpreadsheet className="w-4 h-4" />
+                <Upload className="w-4 h-4" />
                 Unduh Excel Jurnal
               </button>
               <button

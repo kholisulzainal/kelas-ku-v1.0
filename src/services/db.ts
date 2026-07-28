@@ -16,7 +16,7 @@ import {
   BukuDigital,
   UserRole
 } from '../types';
-import { syncRowToSupabase, deleteRowFromSupabase } from './supabase';
+import { syncRowToSupabase, deleteRowFromSupabase, saveOperatorCredentialsToSupabase } from './supabase';
 import { uploadFileToSupabaseStorage } from './storage.service';
 
 // Empty default data structures (No hardcoded dummy/sample records)
@@ -247,15 +247,39 @@ export const db = {
 
   operatorCredentials: {
     get: () => {
-      const u = localStorage.getItem('operator_username') || 'operator';
-      const p = localStorage.getItem('operator_password') || 'operator123';
+      let u = localStorage.getItem('operator_username') || 'operator';
+      let p = localStorage.getItem('operator_password') || 'operator123';
+      const raw = localStorage.getItem('operator_credentials');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          const item = Array.isArray(parsed) ? parsed[0] : parsed;
+          if (item) {
+            if (item.username) u = item.username;
+            if (item.password) p = item.password;
+          }
+        } catch (e) {}
+      }
       return { username: u, password: p };
     },
     update: (username: string, password?: string) => {
-      localStorage.setItem('operator_username', username.trim().toLowerCase());
-      if (password) {
-        localStorage.setItem('operator_password', password.trim());
+      const cleanUsername = username.trim().toLowerCase();
+      const cleanPassword = password ? password.trim() : undefined;
+      localStorage.setItem('operator_username', cleanUsername);
+      if (cleanPassword) {
+        localStorage.setItem('operator_password', cleanPassword);
       }
+      const currentP = cleanPassword || localStorage.getItem('operator_password') || 'operator123';
+      const arr = [{
+        id: 'op-001',
+        username: cleanUsername,
+        password: currentP,
+        nama_operator: 'Operator Utama SD',
+        is_active: true,
+        updated_at: new Date().toISOString()
+      }];
+      localStorage.setItem('operator_credentials', JSON.stringify(arr));
+      saveOperatorCredentialsToSupabase(cleanUsername, cleanPassword).catch(err => console.warn('Sync operator error:', err));
     }
   },
 
@@ -523,10 +547,9 @@ export const db = {
     },
     upsert: (item: DaftarTugas) => {
       const list = db.daftarTugas.getAll();
-      const isNew = !item.id;
       const finalItem = { ...item, id: item.id || `tugas-${Date.now()}` };
-
       const idx = list.findIndex(t => t.id === finalItem.id);
+      const isNew = idx === -1;
       if (idx > -1) {
         list[idx] = finalItem;
       } else {
@@ -606,31 +629,51 @@ export const db = {
     // Simulate Automatic Grading and submit from student
     submitTask: (tugasId: string, siswaId: string, customScore?: number) => {
       const list = db.tugasSiswa.getAll();
-      const idx = list.findIndex(ts => ts.tugasId === tugasId && ts.siswaId === siswaId);
       const student = db.siswa.getAll().find(s => s.id === siswaId);
-      const parent = db.orangTua.getAll().find(p => p.siswaId === siswaId);
-      const task = db.daftarTugas.getAll().find(t => t.id === tugasId);
+      const studentNisn = student?.nisn?.trim();
+      const studentEmail = student?.email?.trim().toLowerCase();
 
+      const candidateIds = Array.from(new Set([
+        siswaId,
+        studentNisn,
+        studentEmail
+      ].filter(Boolean) as string[]));
+
+      const task = db.daftarTugas.getAll().find(t => t.id === tugasId);
       const finalScore = customScore != null ? customScore : undefined;
+      const nowIso = new Date().toISOString();
+
+      // Find all matching indices for candidate student IDs
+      const matchingIndices: number[] = [];
+      list.forEach((ts, idx) => {
+        if (ts.tugasId === tugasId && (candidateIds.includes(ts.siswaId) || candidateIds.includes(ts.id.replace(`ts-${tugasId}-`, '')))) {
+          matchingIndices.push(idx);
+        }
+      });
+
+      const primaryId = matchingIndices.length > 0 ? list[matchingIndices[0]].id : `ts-${tugasId}-${siswaId}`;
+      const existingStartedAt = matchingIndices.length > 0 ? list[matchingIndices[0]].startedAt : null;
 
       const submitted: TugasSiswa = {
-        id: idx > -1 ? list[idx].id : `ts-${tugasId}-${siswaId}`,
+        id: primaryId,
         tugasId,
         siswaId,
         statusPengerjaan: true,
-        tanggalDikerjakan: new Date().toISOString(),
+        status: 'SELESAI',
+        startedAt: existingStartedAt || nowIso,
+        submittedAt: nowIso,
+        tanggalDikerjakan: nowIso.split('T')[0],
         nilai: finalScore,
         score: finalScore ?? null,
-        umpanBalik: finalScore != null ? 'Sangat teliti dan tulisan rapi.' : 'Menunggu sinkronisasi nilai dari Webhook Google Form.'
+        umpanBalik: finalScore != null ? 'Tugas diselesaikan melalui Google Form (Nilai tersinkron otomatis).' : 'Tugas dikirim. Menunggu sinkronisasi nilai dari Webhook Google Form.'
       };
 
-      if (idx > -1) {
-        list[idx] = submitted;
-      } else {
-        list.push(submitted);
-      }
-      db.tugasSiswa.save(list);
-      syncRowToSupabase('tugas_siswa', submitted);
+      // Filter out all candidate entries and insert unified submitted record
+      const newList = list.filter((_, idx) => !matchingIndices.includes(idx));
+      newList.push(submitted);
+
+      db.tugasSiswa.save(newList);
+      syncRowToSupabase('tugas_siswa', submitted, true).catch(() => {});
 
       // Save into formal Penilaian (harian) as well if score exists!
       if (task && finalScore != null) {
@@ -639,14 +682,18 @@ export const db = {
           siswaId,
           mapelId: task.mapelId,
           tipe: 'harian',
-          namaPenilaian: `Tugas: ${task.judulTugas}`,
+          namaPenilaian: task.judulTugas || 'Kuis Google Form',
           nilai: finalScore,
-          deskripsiKompetensi: `Siswa telah menyelesaikan tugas "${task.judulTugas}".`,
-          tanggalPenilaian: new Date().toISOString().split('T')[0]
+          deskripsiKompetensi: `Nilai dari pengerjaan tugas ${task.judulTugas || ''}`,
+          tanggalPenilaian: nowIso.split('T')[0],
+          dinilaiOlehId: task.dibuatOlehId || 'guru-1',
+          kelas: student?.kelas || task.kelas || 'Kelas 4-A'
         });
+        window.dispatchEvent(new Event('penilaians-updated'));
       }
 
       // Add parent notification
+      const parent = db.orangTua.getAll().find(p => p.siswaId === siswaId);
       if (student && parent && task) {
         db.notifikasi.add({
           penerimaRole: 'orang_tua',

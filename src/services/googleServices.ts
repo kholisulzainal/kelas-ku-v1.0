@@ -707,13 +707,30 @@ export async function processGoogleFormWebhookSubmission(payload: GoogleFormWebh
     ? gurus.find(g => g.googleEmail?.toLowerCase() === payload.googleEmail?.toLowerCase())
     : null;
 
-  // 1. Match student
-  let matchedSiswa = siswas.find(s => {
-    if (payload.nisn && s.nisn && s.nisn.trim() === payload.nisn.trim()) return true;
-    if (payload.email && s.noTeleponOrtu && s.noTeleponOrtu.toLowerCase().includes(payload.email.toLowerCase())) return true;
-    if (payload.namaSiswa && s.namaSiswa.toLowerCase().trim() === payload.namaSiswa.toLowerCase().trim()) return true;
-    return false;
-  });
+  // 1. Match student using priority order: 1. ID Siswa, 2. NISN, 3. Email / Nama Siswa
+  const searchId = (payload.nisn || payload.email || payload.namaSiswa || '').trim();
+  
+  let matchedSiswa: Siswa | undefined;
+
+  // Priority 1: Student ID (Primary)
+  if (searchId) {
+    matchedSiswa = siswas.find(s => s.id === searchId || searchId.includes(s.id));
+  }
+
+  // Priority 2: NISN
+  if (!matchedSiswa && searchId) {
+    matchedSiswa = siswas.find(s => s.nisn && (s.nisn.trim() === searchId || searchId.includes(s.nisn.trim())));
+  }
+
+  // Priority 3: Email or Student Name
+  if (!matchedSiswa) {
+    matchedSiswa = siswas.find(s => {
+      if (payload.email && s.email && s.email.toLowerCase().trim() === payload.email.toLowerCase().trim()) return true;
+      if (payload.email && s.noTeleponOrtu && s.noTeleponOrtu.toLowerCase().includes(payload.email.toLowerCase())) return true;
+      if (payload.namaSiswa && s.namaSiswa.toLowerCase().trim() === payload.namaSiswa.toLowerCase().trim()) return true;
+      return false;
+    });
+  }
 
   // Fallback fuzzy match by student name substring
   if (!matchedSiswa && payload.namaSiswa) {

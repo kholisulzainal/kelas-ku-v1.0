@@ -18,7 +18,7 @@ export const tugasService = {
             tanggalDiberikan: t.tanggal_diberikan,
             tenggatWaktu: t.tenggat_waktu || '',
             dibuatOlehId: t.dibuat_oleh_id || '',
-            kelas: t.kelas || 'Kelas 4'
+            kelas: t.kelas || ''
           }));
           db.daftarTugas.save(items);
           return items;
@@ -56,11 +56,13 @@ export const tugasService = {
 
   async getTugasSiswa(): Promise<TugasSiswa[]> {
     const client = getSupabaseClient();
+    const localList = db.tugasSiswa.getAll();
+
     if (client) {
       try {
         const { data, error } = await client.from('tugas_siswa').select('*');
         if (!error && data) {
-          const items: TugasSiswa[] = data.map(ts => ({
+          const remoteItems: TugasSiswa[] = data.map(ts => ({
             id: ts.id,
             tugasId: ts.tugas_id,
             siswaId: ts.siswa_id,
@@ -73,8 +75,54 @@ export const tugasService = {
             score: ts.score ?? ts.nilai ?? null,
             umpanBalik: ts.umpan_balik || ''
           }));
-          db.tugasSiswa.save(items);
-          return items;
+
+          const allStudents = db.siswa.getAll();
+          const getCandidateIds = (sid: string): string[] => {
+            const s = allStudents.find(x => x.id === sid);
+            return Array.from(new Set([
+              sid,
+              s?.email?.toLowerCase(),
+              s?.nisn
+            ].filter(Boolean) as string[]));
+          };
+
+          const mergedMap = new Map<string, TugasSiswa>();
+
+          // First populate local list
+          localList.forEach(loc => {
+            const cIds = getCandidateIds(loc.siswaId);
+            const key = `${loc.tugasId}-${cIds[0] || loc.siswaId}`;
+            mergedMap.set(key, loc);
+          });
+
+          // Merge remote items
+          remoteItems.forEach(rem => {
+            const cIds = getCandidateIds(rem.siswaId);
+            const key = `${rem.tugasId}-${cIds[0] || rem.siswaId}`;
+            const existingLoc = mergedMap.get(key);
+
+            if (existingLoc) {
+              const locIsFinished = existingLoc.status === 'SELESAI' || existingLoc.statusPengerjaan === true;
+              const remIsFinished = rem.status === 'SELESAI' || rem.statusPengerjaan === true;
+              const isDone = locIsFinished || remIsFinished;
+
+              mergedMap.set(key, {
+                ...rem,
+                ...existingLoc,
+                status: isDone ? 'SELESAI' : (existingLoc.status || rem.status),
+                statusPengerjaan: isDone,
+                score: rem.score ?? existingLoc.score ?? rem.nilai ?? existingLoc.nilai ?? null,
+                nilai: rem.nilai ?? existingLoc.nilai ?? rem.score ?? existingLoc.score ?? undefined,
+                submittedAt: existingLoc.submittedAt || rem.submittedAt || (isDone ? new Date().toISOString() : null)
+              });
+            } else {
+              mergedMap.set(key, rem);
+            }
+          });
+
+          const finalMerged = Array.from(mergedMap.values());
+          db.tugasSiswa.save(finalMerged);
+          return finalMerged;
         }
       } catch (err) {
         console.warn('[Tugas Service] Error fetching submissions from Supabase:', err);
@@ -95,63 +143,99 @@ export const tugasService = {
     submission?: TugasSiswa;
   }> {
     const client = getSupabaseClient();
-    
-    // Find student details to get candidate IDs (id, email, emailPrefix)
+
+    // Find student details to get candidate IDs
     const currentSiswa = db.siswa.getAll().find(s => s.id === siswaId);
+    const studentNisn = currentSiswa?.nisn?.trim();
     const studentEmail = currentSiswa?.email?.trim().toLowerCase();
-    const emailPrefix = studentEmail ? studentEmail.split('@')[0] : (siswaId.includes('@') ? siswaId.split('@')[0] : null);
 
     const targetIds = Array.from(
-      new Set([siswaId, studentEmail, emailPrefix].filter(Boolean) as string[])
+      new Set([siswaId, studentNisn, studentEmail].filter(Boolean) as string[])
     );
+
+    // 1. Check existing local DB state first
+    const allLocal = db.tugasSiswa.getAll();
+    const matchingLocals = allLocal.filter(s => s.tugasId === tugasId && targetIds.includes(s.siswaId));
+    const localDone = matchingLocals.find(s => s.status === 'SELESAI' || s.statusPengerjaan === true);
+    const existingLocal = localDone || matchingLocals[0];
+
+    // If local DB is already marked SELESAI, prioritize it immediately
+    if (localDone) {
+      return {
+        status: 'SELESAI',
+        score: localDone.score ?? localDone.nilai ?? null,
+        startedAt: localDone.startedAt || null,
+        submittedAt: localDone.submittedAt || null,
+        submission: localDone
+      };
+    }
 
     if (client) {
       try {
-        const { data: tsData, error: tsError } = await client
+        let tsRow: any = null;
+        let parsedScore: number | null = null;
+
+        // Query 1: Fetch from tugas_siswa
+        const { data: tsData } = await client
           .from('tugas_siswa')
           .select('*')
           .eq('tugas_id', tugasId)
           .in('siswa_id', targetIds)
-          .order('submitted_at', { ascending: false })
-          .limit(1);
+          .order('submitted_at', { ascending: false });
 
-        if (!tsError && tsData && tsData.length > 0) {
-          const tsRow = tsData[0];
-          let parsedScore = tsRow.score ?? tsRow.nilai ?? null;
+        if (tsData && tsData.length > 0) {
+          const finishedRow = tsData.find((r: any) => r.status === 'SELESAI' || Boolean(r.status_pengerjaan));
+          tsRow = finishedRow || tsData[0];
 
-          if (parsedScore == null) {
-            const { data: pnlData } = await client
-              .from('penilaian')
-              .select('*')
-              .in('siswa_id', targetIds)
-              .order('created_at', { ascending: false });
+          if (tsRow.score != null && !isNaN(Number(tsRow.score))) parsedScore = Number(tsRow.score);
+          else if (tsRow.nilai != null && !isNaN(Number(tsRow.nilai))) parsedScore = Number(tsRow.nilai);
+        }
 
-            if (pnlData && pnlData.length > 0) {
-              const taskObj = db.daftarTugas.getAll().find(t => t.id === tugasId);
-              const matchPnl = pnlData.find(p => p.id?.includes(tugasId) || p.nama_penilaian === taskObj?.judulTugas);
-              if (matchPnl && matchPnl.nilai != null) {
-                parsedScore = Number(matchPnl.nilai);
-              }
+        // Query 2: Search in penilaian table
+        if (parsedScore == null) {
+          const { data: pnlData } = await client
+            .from('penilaian')
+            .select('*')
+            .in('siswa_id', targetIds)
+            .order('created_at', { ascending: false });
+
+          if (pnlData && pnlData.length > 0) {
+            const matchPnl = pnlData.find((p: any) => 
+              targetIds.includes(p.siswa_id) && (p.id.includes(tugasId) || p.nama_penilaian?.includes(tugasId))
+            );
+            if (matchPnl && matchPnl.nilai != null && !isNaN(Number(matchPnl.nilai))) {
+              parsedScore = Number(matchPnl.nilai);
             }
           }
+        }
+
+        if (tsRow || parsedScore != null) {
+          const isDone = parsedScore != null || Boolean(tsRow?.status_pengerjaan) || tsRow?.status === 'SELESAI';
+          const isStarted = Boolean(tsRow?.started_at) || Boolean(existingLocal?.startedAt);
+
+          const statusVal: AssignmentStatus = isDone
+            ? 'SELESAI'
+            : (isStarted ? 'SEDANG_MENGERJAKAN' : 'BELUM_DIKERJAKAN');
+
+          const finalScore = parsedScore ?? existingLocal?.score ?? existingLocal?.nilai ?? null;
 
           const localSub: TugasSiswa = {
-            id: tsRow.id || `ts-${tugasId}-${siswaId}`,
+            id: tsRow?.id || existingLocal?.id || `ts-${tugasId}-${siswaId}`,
             tugasId: tugasId,
             siswaId: siswaId,
-            statusPengerjaan: Boolean(tsRow.status_pengerjaan || tsRow.status === 'SELESAI'),
-            status: (tsRow.status as AssignmentStatus) || (tsRow.status_pengerjaan ? 'SELESAI' : 'BELUM_DIKERJAKAN'),
-            startedAt: tsRow.started_at || null,
-            submittedAt: tsRow.submitted_at || null,
-            tanggalDikerjakan: tsRow.tanggal_dikerjakan || '',
-            nilai: parsedScore ?? undefined,
-            score: parsedScore,
-            umpanBalik: tsRow.umpan_balik || ''
+            statusPengerjaan: isDone,
+            status: statusVal,
+            startedAt: tsRow?.started_at || existingLocal?.startedAt || null,
+            submittedAt: tsRow?.submitted_at || existingLocal?.submittedAt || (isDone ? new Date().toISOString() : null),
+            tanggalDikerjakan: tsRow?.tanggal_dikerjakan || existingLocal?.tanggalDikerjakan || '',
+            nilai: finalScore != null ? finalScore : undefined,
+            score: finalScore,
+            umpanBalik: tsRow?.umpan_balik || existingLocal?.umpanBalik || ''
           };
 
           db.tugasSiswa.upsert(localSub);
 
-          if (parsedScore != null) {
+          if (finalScore != null) {
             const task = db.daftarTugas.getAll().find(t => t.id === tugasId);
             const student = db.siswa.getAll().find(s => s.id === siswaId);
             db.penilaian.upsert({
@@ -160,9 +244,9 @@ export const tugasService = {
               mapelId: task?.mapelId || 'mapel-1',
               tipe: 'harian',
               namaPenilaian: task?.judulTugas || 'Kuis Google Form',
-              nilai: parsedScore,
+              nilai: finalScore,
               deskripsiKompetensi: `Nilai kuis Google Form disinkronkan dari server`,
-              tanggalPenilaian: tsRow.tanggal_dikerjakan || new Date().toISOString().split('T')[0],
+              tanggalPenilaian: tsRow?.tanggal_dikerjakan || new Date().toISOString().split('T')[0],
               dinilaiOlehId: task?.dibuatOlehId || 'guru-1',
               kelas: student?.kelas || task?.kelas || 'Kelas 4-A'
             });
@@ -171,10 +255,10 @@ export const tugasService = {
           }
 
           return {
-            status: (tsRow.status as AssignmentStatus) || (tsRow.status_pengerjaan ? 'SELESAI' : 'BELUM_DIKERJAKAN'),
-            score: parsedScore,
-            startedAt: tsRow.started_at || null,
-            submittedAt: tsRow.submitted_at || null,
+            status: statusVal,
+            score: finalScore,
+            startedAt: localSub.startedAt,
+            submittedAt: localSub.submittedAt,
             submission: localSub
           };
         }
@@ -183,17 +267,14 @@ export const tugasService = {
       }
     }
 
-    const submissions = db.tugasSiswa.getAll();
-    const sub = submissions.find(s => s.tugasId === tugasId && targetIds.includes(s.siswaId));
-    
-    if (sub) {
-      const status: AssignmentStatus = sub.status || (sub.statusPengerjaan ? 'SELESAI' : (sub.startedAt ? 'SEDANG_MENGERJAKAN' : 'BELUM_DIKERJAKAN'));
+    if (existingLocal) {
+      const status: AssignmentStatus = existingLocal.status || (existingLocal.statusPengerjaan ? 'SELESAI' : (existingLocal.startedAt ? 'SEDANG_MENGERJAKAN' : 'BELUM_DIKERJAKAN'));
       return {
         status,
-        score: sub.score ?? sub.nilai ?? null,
-        startedAt: sub.startedAt || null,
-        submittedAt: sub.submittedAt || null,
-        submission: sub
+        score: existingLocal.score ?? existingLocal.nilai ?? null,
+        startedAt: existingLocal.startedAt || null,
+        submittedAt: existingLocal.submittedAt || null,
+        submission: existingLocal
       };
     }
 
@@ -218,7 +299,7 @@ export const tugasService = {
     };
 
     db.tugasSiswa.upsert(sub);
-    await syncRowToSupabase('tugas_siswa', sub, true).catch(e => console.warn(e));
+    syncRowToSupabase('tugas_siswa', sub, true).catch(e => console.warn(e));
 
     return sub;
   },
@@ -228,94 +309,36 @@ export const tugasService = {
   },
 
   async selesaiTugas(tugasId: string, siswaId: string, customScore?: number, umpanBalik?: string): Promise<TugasSiswa> {
-    const client = getSupabaseClient();
     const currentSiswa = db.siswa.getAll().find(s => s.id === siswaId);
     const studentEmail = currentSiswa?.email?.trim().toLowerCase();
     const studentNisn = currentSiswa?.nisn?.trim();
-    const emailPrefix = studentEmail ? studentEmail.split('@')[0] : (siswaId.includes('@') ? siswaId.split('@')[0] : null);
 
     const targetIds = Array.from(
-      new Set([siswaId, studentEmail, studentNisn, emailPrefix].filter(Boolean) as string[])
+      new Set([siswaId, studentEmail, studentNisn].filter(Boolean) as string[])
     );
 
-    let resolvedScore: number | null = customScore != null ? customScore : null;
+    // 1. SAVE LOCALLY IMMEDIATELY & CLEAN UP DUPLICATES
+    db.tugasSiswa.submitTask(tugasId, siswaId, customScore);
 
-    // 1. If customScore was not provided, check if Supabase already received score from Apps Script
-    if (resolvedScore == null && client) {
-      const fetchScoreFromSupabase = async () => {
-        try {
-          const { data: tsData } = await client
-            .from('tugas_siswa')
-            .select('*')
-            .eq('tugas_id', tugasId)
-            .in('siswa_id', targetIds)
-            .order('submitted_at', { ascending: false })
-            .limit(1);
-
-          if (tsData && tsData.length > 0) {
-            const sc = tsData[0].score ?? tsData[0].nilai ?? null;
-            if (sc != null) return Number(sc);
-          }
-
-          const { data: pnlData } = await client
-            .from('penilaian')
-            .select('*')
-            .in('siswa_id', targetIds)
-            .order('created_at', { ascending: false });
-
-          if (pnlData && pnlData.length > 0) {
-            const taskObj = db.daftarTugas.getAll().find(t => t.id === tugasId);
-            const matchPnl = pnlData.find(p => p.id?.includes(tugasId) || p.nama_penilaian === taskObj?.judulTugas);
-            if (matchPnl && matchPnl.nilai != null) {
-              return Number(matchPnl.nilai);
-            }
-          }
-        } catch (err) {
-          console.warn('[Tugas Service] Check score in Supabase failed:', err);
-        }
-        return null;
-      };
-
-      resolvedScore = await fetchScoreFromSupabase();
-
-      // If null, pause 600ms and retry once in case Apps Script webhook is landing right now
-      if (resolvedScore == null) {
-        await new Promise(resolve => setTimeout(resolve, 600));
-        resolvedScore = await fetchScoreFromSupabase();
-      }
-    }
-
-    // 2. Fallback check local database if still null
-    if (resolvedScore == null) {
-      const existingSub = db.tugasSiswa.getAll().find(s => s.tugasId === tugasId && targetIds.includes(s.siswaId));
-      if (existingSub?.score != null) resolvedScore = existingSub.score;
-      else if (existingSub?.nilai != null) resolvedScore = existingSub.nilai;
-
-      if (resolvedScore == null) {
-        const localPnl = db.penilaian.getAll().find(p => targetIds.includes(p.siswaId) && p.id.includes(tugasId));
-        if (localPnl && localPnl.nilai != null) resolvedScore = localPnl.nilai;
-      }
-    }
-
-    const nowIso = new Date().toISOString();
-    const todayStr = new Date().toISOString().split('T')[0];
-    const existing = db.tugasSiswa.getAll().find(s => s.tugasId === tugasId && targetIds.includes(s.siswaId));
-
-    const sub: TugasSiswa = {
-      id: existing?.id || `ts-${tugasId}-${siswaId}`,
+    const submissions = db.tugasSiswa.getAll();
+    const sub = submissions.find(s => s.tugasId === tugasId && targetIds.includes(s.siswaId)) || {
+      id: `ts-${tugasId}-${siswaId}`,
       tugasId: tugasId,
       siswaId: siswaId,
       statusPengerjaan: true,
-      status: 'SELESAI',
-      startedAt: existing?.startedAt || nowIso,
-      submittedAt: nowIso,
-      tanggalDikerjakan: todayStr,
-      nilai: resolvedScore ?? undefined,
-      score: resolvedScore,
-      umpanBalik: umpanBalik || (resolvedScore != null ? 'Tugas diselesaikan melalui Google Form (Nilai tersinkron otomatis).' : 'Tugas dikirim. Menunggu sinkronisasi nilai dari Webhook Google Form.')
+      status: 'SELESAI' as AssignmentStatus,
+      submittedAt: new Date().toISOString(),
+      tanggalDikerjakan: new Date().toISOString().split('T')[0],
+      score: customScore ?? null,
+      nilai: customScore ?? undefined
     };
 
-    db.tugasSiswa.upsert(sub);
+    if (umpanBalik) {
+      sub.umpanBalik = umpanBalik;
+      db.tugasSiswa.upsert(sub);
+    }
+
+    let resolvedScore: number | null = sub.score ?? sub.nilai ?? null;
 
     if (resolvedScore != null) {
       const task = db.daftarTugas.getAll().find(t => t.id === tugasId);
@@ -329,18 +352,92 @@ export const tugasService = {
         namaPenilaian: task?.judulTugas || 'Tugas Google Form',
         nilai: resolvedScore,
         deskripsiKompetensi: `Nilai dari pengerjaan tugas ${task?.judulTugas || ''}`,
-        tanggalPenilaian: todayStr,
+        tanggalPenilaian: sub.tanggalDikerjakan || new Date().toISOString().split('T')[0],
         dinilaiOlehId: task?.dibuatOlehId || 'guru-1',
         kelas: student?.kelas || task?.kelas || 'Kelas 4-A'
       };
 
       db.penilaian.upsert(pnlItem);
       syncRowToSupabase('penilaian', pnlItem, true).catch(err => console.warn(err));
-      window.dispatchEvent(new Event('penilaians-updated'));
-      window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
     }
 
-    await syncRowToSupabase('tugas_siswa', sub, true).catch(err => console.warn(err));
+    window.dispatchEvent(new Event('penilaians-updated'));
+    window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'tugas_siswa' } }));
+
+    // 2. RUN SUPABASE SYNC AND BACKGROUND SCORE FETCHING ASYNCHRONOUSLY WITHOUT BLOCKING THE UI
+    (async () => {
+      try {
+        const client = getSupabaseClient();
+        if (!client) return;
+
+        // Sync main submission row to Supabase
+        await syncRowToSupabase('tugas_siswa', sub, true).catch(err => console.warn(err));
+
+        // Update all candidate student rows in Supabase to SELESAI
+        for (const candId of targetIds) {
+          try {
+            await client
+              .from('tugas_siswa')
+              .update({
+                status: 'SELESAI',
+                status_pengerjaan: true,
+                submitted_at: sub.submittedAt || new Date().toISOString(),
+                score: sub.score,
+                nilai: sub.nilai
+              })
+              .eq('tugas_id', tugasId)
+              .eq('siswa_id', candId);
+          } catch (e) {}
+        }
+
+        // If score was null, do a quick check in Supabase for webhook score
+        if (resolvedScore == null) {
+          try {
+            const { data: tsData } = await client
+              .from('tugas_siswa')
+              .select('*')
+              .eq('tugas_id', tugasId)
+              .in('siswa_id', targetIds)
+              .order('submitted_at', { ascending: false });
+
+            if (tsData && tsData.length > 0) {
+              const matchRow = tsData.find((r: any) => targetIds.includes(r.siswa_id) || r.id === `ts-${tugasId}-${siswaId}`);
+              if (matchRow) {
+                const sc = matchRow.score ?? matchRow.nilai ?? null;
+                if (sc != null && !isNaN(Number(sc))) {
+                  resolvedScore = Number(sc);
+                  sub.score = resolvedScore;
+                  sub.nilai = resolvedScore;
+                  sub.umpanBalik = 'Tugas diselesaikan melalui Google Form (Nilai tersinkron otomatis).';
+                  db.tugasSiswa.upsert(sub);
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Background Poller if score is still null
+        if (sub.score == null) {
+          let attempts = 0;
+          const pollTimer = setInterval(async () => {
+            attempts++;
+            try {
+              const fresh = await tugasService.getStatusTugasSiswa(tugasId, siswaId);
+              if (fresh.score != null) {
+                clearInterval(pollTimer);
+                window.dispatchEvent(new Event('penilaians-updated'));
+                window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'tugas_siswa' } }));
+              }
+            } catch (e) {}
+            if (attempts >= 8) {
+              clearInterval(pollTimer);
+            }
+          }, 2000);
+        }
+      } catch (err) {
+        console.warn('[selesaiTugas async bg sync notice]:', err);
+      }
+    })();
 
     return sub;
   },

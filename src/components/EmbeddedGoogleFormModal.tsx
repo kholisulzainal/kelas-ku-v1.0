@@ -31,17 +31,60 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
     if (!isOpen) {
       setWarningCount(0);
       setShowWarningAlert(false);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
       return;
     }
 
+    // Try requesting fullscreen safely
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      } else if (document.fullscreenElement) {
+        setIsFullscreen(true);
+      }
+    } catch {
+      // Ignore if browser restricts fullscreen without direct gesture
+    }
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && isOpen) {
+        setIsFullscreen(false);
+      } else if (document.fullscreenElement) {
+        setIsFullscreen(true);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    let blurTimer: NodeJS.Timeout | null = null;
+
     const handleBlurOrHide = () => {
-      setWarningCount(prev => prev + 1);
-      setShowWarningAlert(true);
+      // Delay slightly to check if focus moved to embedded Google Form iframe
+      if (blurTimer) clearTimeout(blurTimer);
+      blurTimer = setTimeout(() => {
+        // If activeElement is IFRAME or document still has focus, user is just clicking options in Google Form
+        const activeElem = document.activeElement;
+        const isIframeClick = activeElem && activeElem.tagName === 'IFRAME';
+        
+        if (isIframeClick) {
+          // User clicked inside Google Form iframe to choose an answer -> DO NOT trigger warning
+          return;
+        }
+
+        // Only count as cheating if user actually switched tabs/windows outside the browser
+        if (document.hidden || (!document.hasFocus() && !isIframeClick)) {
+          setWarningCount(prev => prev + 1);
+          setShowWarningAlert(true);
+        }
+      }, 250);
     };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        handleBlurOrHide();
+        setWarningCount(prev => prev + 1);
+        setShowWarningAlert(true);
       }
     };
 
@@ -49,8 +92,13 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      if (blurTimer) clearTimeout(blurTimer);
       window.removeEventListener('blur', handleBlurOrHide);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
     };
   }, [isOpen]);
 
@@ -70,16 +118,6 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
   };
 
   const embedUrl = getEmbedUrl(googleFormUrl);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-      }
-    }
-  };
 
   return (
     <AnimatePresence>
@@ -107,7 +145,7 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
                     Exambrowser Ujian
                   </span>
                   <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Mode Layar Terkunci
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Layar Terkunci Otomatis
                   </span>
                 </div>
                 <h3 className="text-sm sm:text-base font-black text-white truncate mt-0.5">
@@ -118,16 +156,6 @@ export const EmbeddedGoogleFormModal: React.FC<EmbeddedGoogleFormModalProps> = (
 
             {/* Controls */}
             <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                title="Layar Penuh Exam Browser"
-                className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-amber-300 bg-amber-950/60 hover:bg-amber-900/80 px-3 py-2 rounded-xl border border-amber-500/40 transition-all cursor-pointer"
-              >
-                <Maximize2 className="w-3.5 h-3.5" />
-                <span>{isFullscreen ? 'Keluar Layar Penuh' : 'Kunci Layar Penuh'}</span>
-              </button>
-
               {onConfirmFinish && (
                 <button
                   type="button"

@@ -22,17 +22,19 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   const [score, setScore] = useState<number | null>(null);
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // 1. Fetch State Pengerjaan Siswa from student_assignments / local DB
-  const fetchStatus = async () => {
-    setIsLoading(true);
+  const fetchStatus = async (showLoadingSpinner = false) => {
+    if (showLoadingSpinner) {
+      setIsLoading(true);
+    }
     try {
       const res = await tugasService.getStatusTugasSiswa(task.id, studentId);
-      setStatus(res.status);
+      setStatus(prev => (prev === 'SELESAI' || res.status === 'SELESAI') ? 'SELESAI' : res.status);
 
       let resolvedScore = res.score ?? null;
       if (resolvedScore == null) {
@@ -44,7 +46,7 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
         ].filter(Boolean) as string[]));
 
         const matchPnl = db.penilaian.getAll().find(
-          p => candidateIds.includes(p.siswaId) && (p.id.includes(task.id) || p.namaPenilaian === task.judulTugas)
+          p => candidateIds.includes(p.siswaId) && (p.id === `as-${task.id}-${studentId}` || p.id === `as-auto-${task.id}-${studentId}` || p.id.includes(task.id))
         );
         if (matchPnl && matchPnl.nilai != null) {
           resolvedScore = matchPnl.nilai;
@@ -57,19 +59,21 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
     } catch (err) {
       console.warn('Error fetching student assignment status:', err);
     } finally {
-      setIsLoading(false);
+      if (showLoadingSpinner) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    await fetchStatus();
+    await fetchStatus(false);
     setTimeout(() => setIsRefreshing(false), 600);
   };
 
   useEffect(() => {
     if (task.id && studentId) {
-      fetchStatus();
+      fetchStatus(true);
     }
   }, [task.id, studentId]);
 
@@ -77,7 +81,7 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   useEffect(() => {
     if (status === 'SELESAI' && score == null) {
       const interval = setInterval(() => {
-        fetchStatus();
+        fetchStatus(false);
       }, 3500);
 
       const timeout = setTimeout(() => {
@@ -93,7 +97,7 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
 
   // Listen for window focus & custom sync events
   useEffect(() => {
-    const handleSync = () => fetchStatus();
+    const handleSync = () => fetchStatus(false);
     window.addEventListener('focus', handleSync);
     window.addEventListener('supabase-data-updated', handleSync);
     return () => {
@@ -106,12 +110,14 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   const handleStartTask = async () => {
     try {
       setIsSubmitting(true);
-      // 1. Save / Insert record with status 'SEDANG_MENGERJAKAN'
-      await tugasService.mulaiTugas(task.id, studentId);
+      // Immediately open modal & set local state for instant UI response
       setStatus('SEDANG_MENGERJAKAN');
-      setStartedAt(new Date().toISOString());
-      // 2. Buka modal Google Form iframe
+      const nowIso = new Date().toISOString();
+      setStartedAt(nowIso);
       setIsModalOpen(true);
+
+      // Save / Insert record with status 'SEDANG_MENGERJAKAN' asynchronously
+      await tugasService.mulaiTugas(task.id, studentId);
       if (onStatusUpdated) onStatusUpdated();
     } catch (err) {
       console.error('Failed to start assignment:', err);
@@ -130,11 +136,16 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   const handleConfirmCompletion = async () => {
     try {
       setIsSubmitting(true);
-      const updated = await tugasService.selesaiTugas(task.id, studentId);
+      // Immediately set UI status to SELESAI & close modal for zero delay
+      const nowIso = new Date().toISOString();
       setStatus('SELESAI');
-      setScore(updated.score ?? updated.nilai ?? null);
-      setSubmittedAt(updated.submittedAt || new Date().toISOString());
+      setSubmittedAt(nowIso);
       setIsModalOpen(false);
+
+      const updated = await tugasService.selesaiTugas(task.id, studentId);
+      if (updated.score != null || updated.nilai != null) {
+        setScore(updated.score ?? updated.nilai ?? null);
+      }
       if (onStatusUpdated) onStatusUpdated();
     } catch (err) {
       console.error('Failed to finish assignment:', err);

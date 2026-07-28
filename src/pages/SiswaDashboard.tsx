@@ -20,6 +20,8 @@ import { exportToCSV } from '../utils/export';
 import { Absensi, Asesmen, DaftarTugas, TugasSiswa } from '../types';
 import { StudentAssignmentCard } from '../components/StudentAssignmentCard';
 import { BukuDigitalView } from '../components/BukuDigitalView';
+import { isTaskForStudentClass } from '../utils/classMatcher';
+import { tugasService } from '../services/tugas.service';
 
 interface SiswaDashboardProps {
   activeTab: string;
@@ -89,7 +91,10 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
 
   useEffect(() => {
     // Sync states on real-time event or fallback interval
-    const sync = () => {
+    const sync = async () => {
+      const fetchedTasks = await tugasService.getDaftarTugas();
+      await tugasService.getTugasSiswa().catch(() => {});
+
       const sObj = db.siswa.getAll().find(s => s.id === siswaId);
       const cIds = Array.from(new Set([
         siswaId,
@@ -97,11 +102,13 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
         sObj?.nisn
       ].filter(Boolean) as string[]));
 
-      setTasks(db.daftarTugas.getAll());
+      setTasks(fetchedTasks && fetchedTasks.length > 0 ? fetchedTasks : db.daftarTugas.getAll());
       setMySubmissions(db.tugasSiswa.getAll().filter(ts => cIds.includes(ts.siswaId)));
       setMyGrades(db.asesmen.getAll().filter(a => cIds.includes(a.siswaId)));
       setMyAttendance(db.absensi.getAll().filter(a => cIds.includes(a.siswaId)));
     };
+
+    sync();
 
     window.addEventListener('supabase-data-updated', sync);
     const interval = setInterval(sync, 4000); // larger interval fallback
@@ -304,21 +311,35 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {tasks.filter(t => !t.kelas || t.kelas === siswaKelas).map((t) => {
-              const mapel = subjects.find(m => m.id === t.mapelId);
+            {tasks.filter(t => isTaskForStudentClass(t.kelas, siswaKelas)).length > 0 ? (
+              tasks.filter(t => isTaskForStudentClass(t.kelas, siswaKelas)).map((t) => {
+                const mapel = subjects.find(m => m.id === t.mapelId);
 
-              return (
-                <StudentAssignmentCard
-                  key={t.id}
-                  task={t}
-                  studentId={siswaId}
-                  mapelName={mapel?.namaMapel}
-                  onStatusUpdated={() => {
-                    setMySubmissions(db.tugasSiswa.getAll().filter(ts => ts.siswaId === siswaId));
-                  }}
-                />
-              );
-            })}
+                return (
+                  <StudentAssignmentCard
+                    key={t.id}
+                    task={t}
+                    studentId={siswaId}
+                    mapelName={mapel?.namaMapel}
+                    onStatusUpdated={() => {
+                      const sObj = db.siswa.getAll().find(s => s.id === siswaId);
+                      const cIds = Array.from(new Set([
+                        siswaId,
+                        sObj?.email?.toLowerCase(),
+                        sObj?.nisn
+                      ].filter(Boolean) as string[]));
+                      setMySubmissions(db.tugasSiswa.getAll().filter(ts => cIds.includes(ts.siswaId)));
+                    }}
+                  />
+                );
+              })
+            ) : (
+              <div className="col-span-1 md:col-span-2 p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                <Bookmark className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-400">Belum Ada Tugas Aktif untuk Kelas Anda ({siswaKelas})</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">Tugas yang dirilis guru akan muncul secara otomatis di halaman ini.</p>
+              </div>
+            )}
           </div>
         </div>
       )}

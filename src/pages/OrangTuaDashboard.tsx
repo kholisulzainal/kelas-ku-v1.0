@@ -16,6 +16,8 @@ import { db } from '../services/db';
 import { exportToCSV } from '../utils/export';
 import { Absensi, Asesmen, DaftarTugas, TugasSiswa } from '../types';
 import { BukuDigitalView } from '../components/BukuDigitalView';
+import { isTaskForStudentClass } from '../utils/classMatcher';
+import { tugasService } from '../services/tugas.service';
 
 interface OrangTuaDashboardProps {
   activeTab: string;
@@ -37,12 +39,17 @@ export function OrangTuaDashboard({ activeTab, parentId }: OrangTuaDashboardProp
 
   useEffect(() => {
     // Sync states on real-time event or fallback interval
-    const sync = () => {
-      setTasks(db.daftarTugas.getAll());
+    const sync = async () => {
+      const fetchedTasks = await tugasService.getDaftarTugas();
+      await tugasService.getTugasSiswa().catch(() => {});
+
+      setTasks(fetchedTasks && fetchedTasks.length > 0 ? fetchedTasks : db.daftarTugas.getAll());
       setChildSubmissions(db.tugasSiswa.getAll().filter(ts => ts.siswaId === targetSiswaId));
       setChildGrades(db.asesmen.getAll().filter(a => a.siswaId === targetSiswaId));
       setChildAttendance(db.absensi.getAll().filter(a => a.siswaId === targetSiswaId));
     };
+
+    sync();
 
     window.addEventListener('supabase-data-updated', sync);
     const interval = setInterval(sync, 4000); // larger interval fallback
@@ -172,7 +179,7 @@ export function OrangTuaDashboard({ activeTab, parentId }: OrangTuaDashboardProp
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {tasks.filter(t => !t.kelas || t.kelas === childKelas).map((t) => {
+            {tasks.filter(t => isTaskForStudentClass(t.kelas, childKelas)).map((t) => {
               const mapel = subjects.find(m => m.id === t.mapelId);
               const submission = childSubmissions.find(sub => sub.tugasId === t.id);
 

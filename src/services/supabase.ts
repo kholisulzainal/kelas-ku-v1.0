@@ -348,6 +348,22 @@ CREATE TABLE IF NOT EXISTS public.buku_digital (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 16. Operator Credentials
+CREATE TABLE IF NOT EXISTS public.operator_credentials (
+  id text PRIMARY KEY DEFAULT 'op-001',
+  username text UNIQUE NOT NULL DEFAULT 'operator',
+  password text NOT NULL DEFAULT 'operator123',
+  nama_operator text DEFAULT 'Operator Sekolah',
+  email text,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+INSERT INTO public.operator_credentials (id, username, password, nama_operator)
+VALUES ('op-001', 'operator', 'operator123', 'Operator Utama SD')
+ON CONFLICT (id) DO NOTHING;
+
 -- SUPABASE STORAGE BUCKETS
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
@@ -372,7 +388,7 @@ BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'profil_sekolah','guru','data_kelas','siswa','orang_tua',
     'mata_pelajaran','jadwal_pelajaran','absensi','daftar_tugas','tugas_siswa',
-    'penilaian','temuan_khusus','notifikasi','application_settings','buku_digital'
+    'penilaian','temuan_khusus','notifikasi','application_settings','buku_digital','operator_credentials'
   ])
   LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
@@ -403,7 +419,8 @@ const VALID_COLUMNS: { [key: string]: string[] } = {
   temuan_khusus: ['id', 'siswa_id', 'tanggal', 'kategori', 'deskripsi', 'tindakan_lanjut', 'dilaporkan_oleh_id', 'kelas'],
   notifikasi: ['id', 'penerima_role', 'penerima_user_id', 'judul', 'pesan', 'tanggal', 'dibaca', 'tugas_id'],
   application_settings: ['id', 'theme', 'primary_color', 'secondary_color', 'website_title', 'footer_text', 'vision', 'mission', 'welcome_message'],
-  buku_digital: ['id', 'judul', 'kelas', 'kategori_buku', 'mapel_id', 'mapel_nama', 'file_url', 'cover_url', 'deskripsi', 'penulis', 'uploaded_by', 'created_at']
+  buku_digital: ['id', 'judul', 'kelas', 'kategori_buku', 'mapel_id', 'mapel_nama', 'file_url', 'cover_url', 'deskripsi', 'penulis', 'uploaded_by', 'created_at'],
+  operator_credentials: ['id', 'username', 'password', 'nama_operator', 'email', 'is_active', 'updated_at']
 };
 
 const DEFAULT_SISWA_NISNS: { [id: string]: string } = {
@@ -1031,7 +1048,8 @@ export async function syncAllToSupabase(): Promise<{ success: boolean; results?:
     { name: 'temuan_khusus', isArray: true },
     { name: 'notifikasi', isArray: true },
     { name: 'application_settings', isArray: false },
-    { name: 'buku_digital', isArray: true }
+    { name: 'buku_digital', isArray: true },
+    { name: 'operator_credentials', isArray: true }
   ];
 
   const results: SyncResults = {};
@@ -1138,7 +1156,8 @@ export async function pullAllFromSupabase(): Promise<{ success: boolean; error?:
     { dbName: 'temuan_khusus', localName: 'temuan_khusus', isArray: true },
     { dbName: 'notifikasi', localName: 'notifikasi', isArray: true },
     { dbName: 'application_settings', localName: 'app_settings', isArray: false },
-    { dbName: 'buku_digital', localName: 'buku_digital', isArray: true }
+    { dbName: 'buku_digital', localName: 'buku_digital', isArray: true },
+    { dbName: 'operator_credentials', localName: 'operator_credentials', isArray: true }
   ];
 
   try {
@@ -1205,4 +1224,95 @@ export async function pullAllFromSupabase(): Promise<{ success: boolean; error?:
     console.error('Exception during pull from Supabase:', e);
     return { success: false, error: e?.message || 'Exception occurred during pull' };
   }
+}
+
+export const OPERATOR_SQL_SCRIPT = `-- SCRIPT SKEMA TABEL OPERATOR SUPABASE
+-- Salin script ini, buka Dashboard Supabase -> SQL Editor -> Klik "New Query" -> Paste & Run!
+
+CREATE TABLE IF NOT EXISTS public.operator_credentials (
+  id text PRIMARY KEY DEFAULT 'op-001',
+  username text UNIQUE NOT NULL DEFAULT 'operator',
+  password text NOT NULL DEFAULT 'operator123',
+  nama_operator text DEFAULT 'Operator Sekolah',
+  email text,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Insert Akun Operator Default
+INSERT INTO public.operator_credentials (id, username, password, nama_operator)
+VALUES ('op-001', 'operator', 'operator123', 'Operator Utama SD')
+ON CONFLICT (id) DO NOTHING;
+
+-- Kebijakan Keamanan (Row Level Security)
+ALTER TABLE public.operator_credentials ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public operator access" ON public.operator_credentials;
+CREATE POLICY "Public operator access" ON public.operator_credentials FOR ALL USING (true) WITH CHECK (true);
+
+NOTIFY pgrst, 'reload schema';
+`;
+
+export async function getOperatorCredentialsFromSupabase(): Promise<{ username: string; password: string; namaOperator?: string } | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  try {
+    const { data, error } = await client
+      .from('operator_credentials')
+      .select('*')
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      return {
+        username: data[0].username || 'operator',
+        password: data[0].password || 'operator123',
+        namaOperator: data[0].nama_operator || 'Operator Sekolah'
+      };
+    }
+  } catch (e) {
+    console.warn('[Supabase] Fetch operator_credentials error:', e);
+  }
+  return null;
+}
+
+export async function saveOperatorCredentialsToSupabase(username: string, password?: string, namaOperator?: string): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanPassword = password ? password.trim() : undefined;
+
+    const payload: any = {
+      id: 'op-001',
+      username: cleanUsername,
+      updated_at: new Date().toISOString()
+    };
+    if (cleanPassword) payload.password = cleanPassword;
+    if (namaOperator) payload.nama_operator = namaOperator;
+
+    let { error } = await client
+      .from('operator_credentials')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      // Fallback try direct update
+      const resUpdate = await client
+        .from('operator_credentials')
+        .update(payload)
+        .eq('id', 'op-001');
+      error = resUpdate.error;
+    }
+
+    if (!error) {
+      console.log('✅ Operator credentials synced to Supabase successfully.');
+      return true;
+    } else {
+      console.warn('Gagal menyimpan operator credentials ke Supabase:', error.message);
+    }
+  } catch (e) {
+    console.warn('Exception saveOperatorCredentialsToSupabase:', e);
+  }
+  return false;
 }
