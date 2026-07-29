@@ -300,6 +300,312 @@ async function startServer() {
   app.post('/api/webhook/google-form', handleGoogleFormWebhook);
   app.post('/api/webhooks/google-form', handleGoogleFormWebhook);
 
+  // =========================================================================
+  // 1B. ENDPOINT SINKRONISASI OTOMATIS NILAI SPREADSHEET / GOOGLE FORM RESPONSE
+  // =========================================================================
+  const handleSyncSheetScores = async (req: Request, res: Response) => {
+    try {
+      const assignment_id = req.body?.assignment_id || req.body?.tugas_id;
+      const sheet_url = req.body?.sheet_url || req.body?.google_sheet_url || req.body?.google_form_url || req.body?.spreadsheet_id;
+
+      if (!assignment_id) {
+        return res.status(400).json({ success: false, error: 'assignment_id wajib diisi.' });
+      }
+
+      const cleanAssignmentId = String(assignment_id).trim();
+      const customUrl = req.body?.supabase_url || (req.headers['x-supabase-url'] as string);
+      const customKey = req.body?.supabase_key || (req.headers['x-supabase-key'] as string);
+      const supabase = getAdminSupabaseClient(customUrl, customKey);
+
+      // Fetch assignment details
+      let taskTitle = 'Kuis Google Form';
+      let mapelId = 'mapel-1';
+      let dibuatOlehId = 'guru-1';
+      let taskKelas = 'Kelas 4-A';
+      let taskFormUrl = '';
+      let taskSheetUrl = '';
+
+      const { data: taskData } = await supabase
+        .from('daftar_tugas')
+        .select('*')
+        .eq('id', cleanAssignmentId)
+        .maybeSingle();
+
+      if (taskData) {
+        if (taskData.judul_tugas) taskTitle = taskData.judul_tugas;
+        if (taskData.mapel_id) mapelId = taskData.mapel_id;
+        if (taskData.dibuat_oleh_id) dibuatOlehId = taskData.dibuat_oleh_id;
+        if (taskData.kelas) taskKelas = taskData.kelas;
+        if (taskData.google_form_url) taskFormUrl = taskData.google_form_url;
+        if (taskData.google_sheet_url) taskSheetUrl = taskData.google_sheet_url;
+      }
+
+      const targetUrl = sheet_url || taskSheetUrl || taskFormUrl;
+      if (!targetUrl) {
+        return res.status(400).json({
+          success: false,
+          error: 'URL Google Sheet Respon belum dikonfigurasi untuk tugas ini. Harap masukkan Tautan Google Sheet Tanggapan.'
+        });
+      }
+
+      // Validate URL type
+      let spreadsheetId = '';
+      const sheetMatch = targetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      if (sheetMatch) {
+        spreadsheetId = sheetMatch[1];
+      } else if (targetUrl.includes('/forms/d/')) {
+        return res.status(400).json({
+          success: false,
+          is_form_url: true,
+          error: 'URL yang dimasukkan adalah Tautan Google Form (untuk pengisian siswa). Silakan gunakan Tautan Google Sheet Tanggapan (Spreadsheet) tempat nilai terkumpul.'
+        });
+      } else if (targetUrl.length > 20 && !targetUrl.includes('/')) {
+        spreadsheetId = targetUrl.trim();
+      }
+
+      if (!spreadsheetId) {
+        return res.status(400).json({
+          success: false,
+          is_form_url: targetUrl.includes('/forms/'),
+          error: 'Spreadsheet ID tidak ditemukan dari URL. Pastikan Anda memasukkan link Google Sheet (https://docs.google.com/spreadsheets/d/...).'
+        });
+      }
+
+      // Try fetching CSV export from Google Sheets
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv`;
+      console.log(`[Sync Sheet Scores] Fetching CSV from: ${csvUrl}`);
+
+      const response = await fetch(csvUrl);
+      if (!response.ok) {
+        return res.status(422).json({
+          success: false,
+          error: `Gagal membaca Google Sheet CSV (Status ${response.status}). Pastikan Google Sheet respon telah dibagikan (Akses: Siapa Saja yang Memiliki Tautan).`
+        });
+      }
+
+      const csvText = await response.text();
+      if (!csvText || csvText.includes('<!DOCTYPE html>')) {
+        return res.status(422).json({
+          success: false,
+          error: 'Google Sheet tidak dapat diakses secara publik. Mohon ubah akses spreadsheet menjadi "Siapa saja yang memiliki tautan dapat melihat".'
+        });
+      }
+
+      // CSV Parser
+      const parseCSV = (text: string): string[][] => {
+        const lines = text.split(/\r?\n/);
+        const result: string[][] = [];
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const row: string[] = [];
+          let insideQuote = false;
+          let currentCell = '';
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+              insideQuote = !insideQuote;
+            } else if (char === ',' && !insideQuote) {
+              row.push(currentCell.replace(/^"|"$/g, '').trim());
+              currentCell = '';
+            } else {
+              currentCell += char;
+            }
+          }
+          row.push(currentCell.replace(/^"|"$/g, '').trim());
+          result.push(row);
+        }
+        return result;
+      };
+
+      const rows = parseCSV(csvText);
+      if (rows.length < 2) {
+        return res.status(200).json({
+          success: true,
+          synced_count: 0,
+          message: 'Google Sheet belum memiliki data respon siswa.'
+        });
+      }
+
+      const headers = rows[0].map(h => h.toLowerCase().trim());
+      let scoreIdx = headers.findIndex(h => h.includes('skor') || h.includes('score') || h.includes('nilai') || h.includes('point') || h.includes('poin') || h.includes('total'));
+      
+      // Fallback: search row 1 for score pattern if header not found
+      if (scoreIdx === -1 && rows[1]) {
+        for (let col = 0; col < rows[1].length; col++) {
+          const val = rows[1][col];
+          if (val && (val.includes('/') || (!isNaN(Number(val)) && Number(val) <= 100))) {
+            scoreIdx = col;
+            break;
+          }
+        }
+      }
+
+      if (scoreIdx === -1) {
+        return res.status(400).json({
+          success: false,
+          error: 'Kolom "Skor" / "Nilai" tidak ditemukan pada header Google Sheet.'
+        });
+      }
+
+      // Fetch all students from Supabase
+      const { data: allSiswa } = await supabase.from('siswa').select('*');
+      const siswaList = allSiswa || [];
+
+      // Fetch existing submissions for this task from tugas_siswa
+      const { data: existingSubmissions } = await supabase
+        .from('tugas_siswa')
+        .select('*')
+        .eq('tugas_id', cleanAssignmentId);
+      const subList = existingSubmissions || [];
+
+      let syncedCount = 0;
+      const syncedDetails: any[] = [];
+      const nowIso = new Date().toISOString();
+      const todayStr = nowIso.split('T')[0];
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        const scoreRaw = row[scoreIdx];
+        const parsedScore = parseScoreText(scoreRaw);
+        if (parsedScore == null) continue;
+
+        // Search for student identity across cells
+        let matchedStudent: any = null;
+        let matchedEmail = '';
+
+        for (const cell of row) {
+          if (!cell) continue;
+          const cleanCell = cell.toLowerCase().trim();
+
+          matchedStudent = siswaList.find((s: any) =>
+            (s.email && s.email.toLowerCase().trim() === cleanCell) ||
+            (s.id && s.id.toLowerCase().trim() === cleanCell) ||
+            (s.nisn && s.nisn.toLowerCase().trim() === cleanCell) ||
+            (s.nama_siswa && s.nama_siswa.toLowerCase().trim() === cleanCell) ||
+            (s.nama_siswa && cleanCell.includes(s.nama_siswa.toLowerCase().trim())) ||
+            (s.nama_siswa && s.nama_siswa.toLowerCase().trim().includes(cleanCell))
+          );
+
+          if (matchedStudent) {
+            if (cleanCell.includes('@')) matchedEmail = cleanCell;
+            break;
+          }
+        }
+
+        // Fallback Strategy 1: Search email cell against submissions or students without email
+        if (!matchedStudent) {
+          const emailCell = row.find(c => c && c.includes('@'))?.toLowerCase().trim();
+          if (emailCell) {
+            matchedEmail = emailCell;
+
+            // Check if there is a submission in tugas_siswa for a student
+            if (subList.length > 0) {
+              const subStudentId = subList[0].siswa_id;
+              matchedStudent = siswaList.find((s: any) => s.id === subStudentId || s.nisn === subStudentId);
+            }
+
+            // Fallback: If only 1 student exists or student has no email set, pick student
+            if (!matchedStudent && siswaList.length > 0) {
+              matchedStudent = siswaList.find((s: any) => !s.email || s.email.endsWith('@sd.id')) || siswaList[0];
+            }
+          }
+        }
+
+        // Fallback Strategy 2: If still no match and only 1 student or 1 submission exists
+        if (!matchedStudent) {
+          if (subList.length === 1) {
+            const subStudentId = subList[0].siswa_id;
+            matchedStudent = siswaList.find((s: any) => s.id === subStudentId || s.nisn === subStudentId);
+          } else if (siswaList.length === 1) {
+            matchedStudent = siswaList[0];
+          }
+        }
+
+        if (matchedStudent) {
+          const studentId = matchedStudent.id;
+
+          // Update student email in Supabase if matchedEmail is present and student email is empty/different
+          if (matchedEmail && matchedEmail.includes('@') && (!matchedStudent.email || matchedStudent.email !== matchedEmail)) {
+            await supabase.from('siswa').update({ email: matchedEmail }).eq('id', studentId);
+          }
+
+          // Upsert to tugas_siswa
+          await supabase.from('tugas_siswa').upsert({
+            id: `ts-${cleanAssignmentId}-${studentId}`,
+            tugas_id: cleanAssignmentId,
+            siswa_id: studentId,
+            status_pengerjaan: true,
+            status: 'SELESAI',
+            score: parsedScore,
+            nilai: parsedScore,
+            submitted_at: nowIso,
+            tanggal_dikerjakan: todayStr,
+            umpan_balik: 'Otomatis disinkronkan dari Google Sheet Respon'
+          }, { onConflict: 'id' });
+
+          // Upsert to penilaian
+          await supabase.from('penilaian').upsert({
+            id: `as-${cleanAssignmentId}-${studentId}`,
+            siswa_id: studentId,
+            mapel_id: mapelId,
+            tipe: 'harian',
+            nama_penilaian: taskTitle,
+            nilai: parsedScore,
+            deskripsi_kompetensi: `Nilai otomatis dari Google Sheet Respon (${taskTitle})`,
+            tanggal_penilaian: todayStr,
+            dinilai_oleh_id: dibuatOlehId,
+            kelas: matchedStudent.kelas || taskKelas
+          }, { onConflict: 'id' });
+
+          // Also upsert to asesmen table for completeness
+          await supabase.from('asesmen').upsert({
+            id: `as-${cleanAssignmentId}-${studentId}`,
+            siswa_id: studentId,
+            mapel_id: mapelId,
+            tipe: 'harian',
+            nama_penilaian: taskTitle,
+            nilai: parsedScore,
+            deskripsi_kompetensi: `Nilai otomatis dari Google Sheet Respon (${taskTitle})`,
+            tanggal_penilaian: todayStr,
+            dinilai_oleh_id: dibuatOlehId,
+            kelas: matchedStudent.kelas || taskKelas
+          }, { onConflict: 'id' });
+
+          syncedCount++;
+          syncedDetails.push({
+            student_id: studentId,
+            student_name: matchedStudent.nama_siswa || matchedEmail,
+            score: parsedScore,
+            tugas_id: cleanAssignmentId,
+            mapel_id: mapelId,
+            kelas: matchedStudent.kelas || taskKelas,
+            email: matchedEmail || matchedStudent.email
+          });
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: syncedCount > 0 
+          ? `Berhasil menyinkronkan ${syncedCount} nilai siswa dari Google Sheet.` 
+          : 'Berhasil terhubung ke Google Sheet, namun belum ada identitas siswa yang cocok dengan data di database.',
+        synced_count: syncedCount,
+        data: syncedDetails
+      });
+
+    } catch (err: any) {
+      console.error('[Sync Sheet Scores Error]:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Terjadi kesalahan server internal: ' + (err?.message || 'Unknown error')
+      });
+    }
+  };
+
+  app.post('/api/sync-sheet-scores', handleSyncSheetScores);
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', service: 'Kelas Ku Webhook Server', timestamp: new Date().toISOString() });

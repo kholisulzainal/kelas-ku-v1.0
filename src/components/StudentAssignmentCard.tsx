@@ -3,6 +3,7 @@ import { Play, RotateCw, CheckCircle2, Clock, Award, FileText, AlertCircle, Exte
 import { DaftarTugas, AssignmentStatus } from '../types';
 import { db } from '../services/db';
 import { tugasService } from '../services/tugas.service';
+import { syncGoogleFormScoresFromSheet } from '../services/googleServices';
 import { EmbeddedGoogleFormModal } from './EmbeddedGoogleFormModal';
 
 interface StudentAssignmentCardProps {
@@ -67,6 +68,9 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
+    if (task.id) {
+      await syncGoogleFormScoresFromSheet(task.id, task.googleSheetUrl || task.googleFormUrl).catch(() => {});
+    }
     await fetchStatus(false);
     setTimeout(() => setIsRefreshing(false), 600);
   };
@@ -82,11 +86,11 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
     if (status === 'SELESAI' && score == null) {
       const interval = setInterval(() => {
         fetchStatus(false);
-      }, 3500);
+      }, 8000);
 
       const timeout = setTimeout(() => {
         clearInterval(interval);
-      }, 60000); // Poll for up to 1 minute
+      }, 40000); // Poll for up to 40s
 
       return () => {
         clearInterval(interval);
@@ -100,9 +104,13 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
     const handleSync = () => fetchStatus(false);
     window.addEventListener('focus', handleSync);
     window.addEventListener('supabase-data-updated', handleSync);
+    window.addEventListener('penilaians-updated', handleSync);
+    window.addEventListener('asesmens-updated', handleSync);
     return () => {
       window.removeEventListener('focus', handleSync);
       window.removeEventListener('supabase-data-updated', handleSync);
+      window.removeEventListener('penilaians-updated', handleSync);
+      window.removeEventListener('asesmens-updated', handleSync);
     };
   }, [task.id, studentId]);
 
@@ -141,6 +149,10 @@ export const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
       setStatus('SELESAI');
       setSubmittedAt(nowIso);
       setIsModalOpen(false);
+
+      if (task.id) {
+        syncGoogleFormScoresFromSheet(task.id, task.googleSheetUrl || task.googleFormUrl).catch(() => {});
+      }
 
       const updated = await tugasService.selesaiTugas(task.id, studentId);
       if (updated.score != null || updated.nilai != null) {

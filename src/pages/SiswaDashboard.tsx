@@ -98,13 +98,15 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
       const sObj = db.siswa.getAll().find(s => s.id === siswaId);
       const cIds = Array.from(new Set([
         siswaId,
+        sObj?.id,
         sObj?.email?.toLowerCase(),
-        sObj?.nisn
+        sObj?.nisn,
+        sObj?.namaSiswa?.toLowerCase()
       ].filter(Boolean) as string[]));
 
       setTasks(fetchedTasks && fetchedTasks.length > 0 ? fetchedTasks : db.daftarTugas.getAll());
-      setMySubmissions(db.tugasSiswa.getAll().filter(ts => cIds.includes(ts.siswaId)));
-      setMyGrades(db.asesmen.getAll().filter(a => cIds.includes(a.siswaId)));
+      setMySubmissions(db.tugasSiswa.getAll().filter(ts => cIds.includes(ts.siswaId) || cIds.some(c => ts.siswaId?.toLowerCase?.() === c)));
+      setMyGrades(db.asesmen.getAll().filter(a => cIds.includes(a.siswaId) || cIds.some(c => a.siswaId?.toLowerCase?.() === c)));
       setMyAttendance(db.absensi.getAll().filter(a => cIds.includes(a.siswaId)));
     };
 
@@ -115,11 +117,15 @@ export function SiswaDashboard({ activeTab, siswaId }: SiswaDashboardProps) {
     };
 
     window.addEventListener('supabase-data-updated', sync);
+    window.addEventListener('penilaians-updated', sync);
+    window.addEventListener('asesmens-updated', sync);
     document.addEventListener('visibilitychange', handleVisibility);
     const interval = setInterval(sync, 30000); // 30s fallback interval
 
     return () => {
       window.removeEventListener('supabase-data-updated', sync);
+      window.removeEventListener('penilaians-updated', sync);
+      window.removeEventListener('asesmens-updated', sync);
       document.removeEventListener('visibilitychange', handleVisibility);
       clearInterval(interval);
     };

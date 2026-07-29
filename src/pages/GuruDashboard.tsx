@@ -41,7 +41,8 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
-  Code
+  Code,
+  RefreshCw
 } from 'lucide-react';
 import { GoogleAppsScriptModal } from '../components/GoogleAppsScriptModal';
 import { AplikasiSetting } from '../components/AplikasiSetting';
@@ -54,7 +55,7 @@ import { exportToCSV, exportToExcel } from '../utils/export';
 import { sendNewAssignmentEmailAlerts } from '../services/googleWorkspace';
 import { getAccessToken, logoutGoogle } from '../services/googleAuth';
 import { GoogleSheetsSyncPanel } from '../components/GoogleSheetsSyncPanel';
-import { updateGuruGoogleEmail } from '../services/googleServices';
+import { updateGuruGoogleEmail, syncGoogleFormScoresFromSheet } from '../services/googleServices';
 import { jsPDF } from 'jspdf';
 // @ts-ignore
 import autoTable from 'jspdf-autotable';
@@ -296,22 +297,52 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
   const [ingestTaskModal, setIngestTaskModal] = useState<DaftarTugas | null>(null);
   const [ingestScores, setIngestScores] = useState<{ [siswaId: string]: { nilai: string | number; deskripsi: string } }>({});
   const [ingestNotice, setIngestNotice] = useState('');
+  const [isAutoSyncingSheet, setIsAutoSyncingSheet] = useState(false);
+  const [tempSheetUrl, setTempSheetUrl] = useState('');
   const [showGFormGuide, setShowGFormGuide] = useState(false);
   const [showAppsScriptModal, setShowAppsScriptModal] = useState(false);
 
-  const handleOpenIngestModal = (task: DaftarTugas) => {
+  const handleOpenIngestModal = async (task: DaftarTugas) => {
     setIngestTaskModal(task);
     setIngestNotice('');
+    setTempSheetUrl(task.googleSheetUrl || (task.googleFormUrl.includes('/spreadsheets/') ? task.googleFormUrl : ''));
+
+    const syncUrl = task.googleSheetUrl || task.googleFormUrl;
+
+    // Attempt automatic score sync if URL exists
+    if (syncUrl) {
+      setIsAutoSyncingSheet(true);
+      try {
+        const res = await syncGoogleFormScoresFromSheet(task.id, syncUrl);
+        if (res.success && res.syncedCount > 0) {
+          setIngestNotice(`⚡ Berhasil menyinkronkan ${res.syncedCount} nilai siswa secara otomatis dari Google Sheet Respon!`);
+        } else if (res.isFormUrl) {
+          setIngestNotice('ℹ️ Tautan saat ini adalah link Google Form. Masukkan Tautan Google Sheet Respon (Spreadsheet) di bawah ini untuk Auto-Sync.');
+        } else if (res.message) {
+          setIngestNotice(`ℹ️ ${res.message}`);
+        }
+      } catch (e) {
+        console.warn('Auto-sync notice:', e);
+      } finally {
+        setIsAutoSyncingSheet(false);
+      }
+    }
+
+    const freshTugasSiswa = db.tugasSiswa.getAll();
+    const freshAsesmens = db.penilaian.getAll();
+    setTugasSiswa(freshTugasSiswa);
+    setAsesmens(freshAsesmens);
+
     const initialScores: { [siswaId: string]: { nilai: string | number; deskripsi: string } } = {};
     const relevantStudents = siswas.filter(s => activeClassFilter === 'Semua' || s.kelas === activeClassFilter);
     
     relevantStudents.forEach(s => {
-      const existing = asesmens.find(a => 
+      const existing = freshAsesmens.find(a => 
         a.siswaId === s.id && 
         a.mapelId === task.mapelId && 
         a.namaPenilaian.includes(task.judulTugas)
       );
-      const ts = tugasSiswa.find(ts => ts.tugasId === task.id && ts.siswaId === s.id);
+      const ts = freshTugasSiswa.find(ts => ts.tugasId === task.id && ts.siswaId === s.id);
       const realScore = ts?.score ?? ts?.nilai;
       initialScores[s.id] = {
         nilai: existing ? existing.nilai : (realScore != null ? realScore : ''),
@@ -319,6 +350,37 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       };
     });
     setIngestScores(initialScores);
+  };
+
+  const handleSaveAndSyncSheetUrl = async () => {
+    if (!ingestTaskModal) return;
+    if (!tempSheetUrl.trim()) {
+      setIngestNotice('⚠️ Silakan tempel Tautan Google Sheet Respon terlebih dahulu.');
+      return;
+    }
+
+    const updatedTask: DaftarTugas = {
+      ...ingestTaskModal,
+      googleSheetUrl: tempSheetUrl.trim()
+    };
+
+    db.daftarTugas.upsert(updatedTask);
+    syncRowToSupabase('daftar_tugas', updatedTask, true).catch(err => console.warn('Supabase task sync error:', err));
+    setTugases(db.daftarTugas.getAll());
+    setIngestTaskModal(updatedTask);
+
+    setIsAutoSyncingSheet(true);
+    setIngestNotice('Membaca dan menyinkronkan nilai dari Google Sheet Respon...');
+
+    const res = await syncGoogleFormScoresFromSheet(updatedTask.id, tempSheetUrl.trim());
+    setIsAutoSyncingSheet(false);
+
+    if (res.success) {
+      setIngestNotice(`✅ ${res.message}`);
+      handleOpenIngestModal(updatedTask);
+    } else {
+      setIngestNotice(`⚠️ ${res.message}`);
+    }
   };
 
   const handleSaveIngestScores = (task: DaftarTugas) => {
@@ -448,9 +510,18 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       }
     };
 
+    const handleAsesmenEvent = () => {
+      setAsesmens(db.asesmen.getAll());
+      setTugasSiswa(db.tugasSiswa.getAll());
+    };
+
     window.addEventListener('supabase-data-updated', handleDataUpdate);
+    window.addEventListener('penilaians-updated', handleAsesmenEvent);
+    window.addEventListener('asesmens-updated', handleAsesmenEvent);
     return () => {
       window.removeEventListener('supabase-data-updated', handleDataUpdate);
+      window.removeEventListener('penilaians-updated', handleAsesmenEvent);
+      window.removeEventListener('asesmens-updated', handleAsesmenEvent);
     };
   }, []);
   const [classList, setClassList] = useState<string[]>(() => {
@@ -1544,6 +1615,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       judulTugas: data.judulTugas,
       deskripsi: data.deskripsi,
       googleFormUrl: data.googleFormUrl,
+      googleSheetUrl: data.googleSheetUrl || '',
       tanggalDiberikan: data.tanggalDiberikan || new Date().toISOString().split('T')[0],
       tenggatWaktu: data.tenggatWaktu || '2026-07-25T23:59',
       dibuatOlehId: loggedInUserId,
@@ -6196,8 +6268,15 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                   <input type="text" {...register('judulTugas', { required: true })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Tautan Google Form Resmi</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Tautan Google Form (Untuk Siswa Mengerjakan)</label>
                   <input type="url" placeholder="https://docs.google.com/forms/..." {...register('googleFormUrl', { required: true })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Tautan Google Sheet Tanggapan (Untuk Auto-Sync Nilai - Opsional/Dianjurkan)</label>
+                  <input type="url" placeholder="https://docs.google.com/spreadsheets/d/..." {...register('googleSheetUrl')} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm" />
+                  <p className="text-[10px] text-slate-400 mt-1 leading-tight">
+                    💡 <strong>Cara Mengambil Link Google Sheet:</strong> Buka Google Form Anda → Tab <strong>Jawaban (Responses)</strong> → Klik ikon <strong>'Lihat di Spreadsheet'</strong> → Salin & Tempel link Spreadsheet tersebut di sini.
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -7295,23 +7374,82 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
               </div>
             )}
 
-            <div className="space-y-3">
-              <div className="flex justify-between items-center text-xs text-slate-600 dark:text-slate-400">
-                <span>Daftar Siswa Kelas {activeClassFilter}:</span>
+            {/* Google Sheet Response URL Banner */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  📊 Tautan Google Sheet Tanggapan (Auto-Sync Nilai)
+                </span>
+                {ingestTaskModal.googleSheetUrl && (
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md">
+                    ✓ Tersambung
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  value={tempSheetUrl}
+                  onChange={(e) => setTempSheetUrl(e.target.value)}
+                  className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-white"
+                />
                 <button
                   type="button"
-                  onClick={() => {
-                    const relevantStudents = siswas.filter(s => activeClassFilter === 'Semua' || s.kelas === activeClassFilter);
-                    const updated = { ...ingestScores };
-                    relevantStudents.forEach(s => {
-                      updated[s.id] = { nilai: 80, deskripsi: `Hasil penilaian Kuis Google Form: ${ingestTaskModal.judulTugas}` };
-                    });
-                    setIngestScores(updated);
-                  }}
-                  className="text-m3-purple dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                  onClick={handleSaveAndSyncSheetUrl}
+                  disabled={isAutoSyncingSheet}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  Isi Nilai Standar KKM (80)
+                  <RefreshCw className={`w-3.5 h-3.5 ${isAutoSyncingSheet ? 'animate-spin' : ''}`} />
+                  <span>{isAutoSyncingSheet ? 'Syncing...' : 'Simpan & Sync'}</span>
                 </button>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-tight">
+                💡 <strong>Cara ambil link:</strong> Buka Google Form Anda → Tab <strong>Jawaban (Responses)</strong> → Klik ikon Google Sheet <strong>'Lihat di Spreadsheet'</strong> → Salin link URL dari address bar dan tempel di sini.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap justify-between items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                <span>Daftar Siswa Kelas {activeClassFilter}:</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isAutoSyncingSheet}
+                    onClick={async () => {
+                      if (!ingestTaskModal) return;
+                      setIsAutoSyncingSheet(true);
+                      setIngestNotice('Membaca dan menyinkronkan nilai dari Google Sheet Respon...');
+                      const syncUrl = ingestTaskModal.googleSheetUrl || tempSheetUrl || ingestTaskModal.googleFormUrl;
+                      const res = await syncGoogleFormScoresFromSheet(ingestTaskModal.id, syncUrl);
+                      setIsAutoSyncingSheet(false);
+                      if (res.success) {
+                        setIngestNotice(`✅ ${res.message}`);
+                        handleOpenIngestModal(ingestTaskModal);
+                      } else {
+                        setIngestNotice(`⚠️ ${res.message}`);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isAutoSyncingSheet ? 'animate-spin' : ''}`} />
+                    <span>{isAutoSyncingSheet ? 'Menyinkronkan...' : '⚡ Auto-Sync Nilai Google Sheet'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const relevantStudents = siswas.filter(s => activeClassFilter === 'Semua' || s.kelas === activeClassFilter);
+                      const updated = { ...ingestScores };
+                      relevantStudents.forEach(s => {
+                        updated[s.id] = { nilai: 80, deskripsi: `Hasil penilaian Kuis Google Form: ${ingestTaskModal.judulTugas}` };
+                      });
+                      setIngestScores(updated);
+                    }}
+                    className="text-m3-purple dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                  >
+                    Isi Standar KKM (80)
+                  </button>
+                </div>
               </div>
 
               <div className="max-h-80 overflow-y-auto space-y-2 pr-1">

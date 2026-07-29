@@ -1,5 +1,6 @@
 import { db } from './db';
 import { getSupabaseClient, syncRowToSupabase, deleteRowFromSupabase } from './supabase';
+import { syncGoogleFormScoresFromSheet } from './googleServices';
 import { DaftarTugas, TugasSiswa, AssignmentStatus } from '../types';
 
 export const tugasService = {
@@ -153,20 +154,40 @@ export const tugasService = {
       new Set([siswaId, studentNisn, studentEmail].filter(Boolean) as string[])
     );
 
-    // 1. Check existing local DB state first
+    // Check existing local DB state
     const allLocal = db.tugasSiswa.getAll();
     const matchingLocals = allLocal.filter(s => s.tugasId === tugasId && targetIds.includes(s.siswaId));
     const localDone = matchingLocals.find(s => s.status === 'SELESAI' || s.statusPengerjaan === true);
     const existingLocal = localDone || matchingLocals[0];
 
-    // If local DB is already marked SELESAI, prioritize it immediately
-    if (localDone) {
+    const localScore = localDone?.score ?? localDone?.nilai ?? null;
+    if (localDone && localScore != null) {
       return {
         status: 'SELESAI',
-        score: localDone.score ?? localDone.nilai ?? null,
+        score: localScore,
         startedAt: localDone.startedAt || null,
         submittedAt: localDone.submittedAt || null,
         submission: localDone
+      };
+    }
+
+    // Check local penilaian table if score in tugasSiswa is null
+    const localPnlMatch = db.penilaian.getAll().find(
+      p => targetIds.includes(p.siswaId) && (p.id.includes(tugasId) || p.namaPenilaian?.includes(tugasId))
+    );
+    if (localPnlMatch && localPnlMatch.nilai != null) {
+      const foundScore = Number(localPnlMatch.nilai);
+      if (localDone) {
+        localDone.score = foundScore;
+        localDone.nilai = foundScore;
+        db.tugasSiswa.upsert(localDone);
+      }
+      return {
+        status: 'SELESAI',
+        score: foundScore,
+        startedAt: localDone?.startedAt || null,
+        submittedAt: localDone?.submittedAt || null,
+        submission: localDone || undefined
       };
     }
 
@@ -429,10 +450,10 @@ export const tugasService = {
                 window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'tugas_siswa' } }));
               }
             } catch (e) {}
-            if (attempts >= 8) {
+            if (attempts >= 4) {
               clearInterval(pollTimer);
             }
-          }, 2000);
+          }, 4000);
         }
       } catch (err) {
         console.warn('[selesaiTugas async bg sync notice]:', err);

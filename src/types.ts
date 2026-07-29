@@ -150,6 +150,7 @@ export interface DaftarTugas {
   judulTugas: string;
   deskripsi: string;
   googleFormUrl: string;
+  googleSheetUrl?: string;
   tanggalDiberikan: string; // YYYY-MM-DD
   tenggatWaktu: string; // YYYY-MM-DDTHH:mm
   dibuatOlehId?: string; // Relasi ke Guru

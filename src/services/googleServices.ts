@@ -813,3 +813,252 @@ export async function processGoogleFormWebhookSubmission(payload: GoogleFormWebh
   };
 }
 
+/**
+ * SINKRONISASI OTOMATIS NILAI GURU DARI GOOGLE SHEET / GOOGLE FORM RESPONSE (AUTO-SYNC)
+ */
+export async function syncGoogleFormScoresFromSheet(
+  assignmentId: string,
+  googleFormOrSheetUrl?: string
+): Promise<{ success: boolean; syncedCount: number; message: string; isFormUrl?: boolean }> {
+  try {
+    // 1. Try server API endpoint first for full Supabase + Server-side sync
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const res = await fetch(`${currentOrigin}/api/sync-sheet-scores`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        assignment_id: assignmentId,
+        sheet_url: googleFormOrSheetUrl
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.synced_count > 0) {
+        // Sync server details to local DB
+        const details = data.data || data.synced_rows || data.synced_details || [];
+        const taskObj = db.daftarTugas.getAll().find(t => t.id === assignmentId);
+        const nowIso = new Date().toISOString();
+        const todayStr = nowIso.split('T')[0];
+
+        details.forEach((d: any) => {
+          const sId = d.student_id;
+          const numScore = Number(d.score);
+          if (sId && !isNaN(numScore)) {
+            // Update local student email if provided
+            if (d.email && d.email.includes('@')) {
+              const localStudents = db.siswa.getAll();
+              const targetStd = localStudents.find(s => s.id === sId || s.nisn === sId);
+              if (targetStd && targetStd.email !== d.email) {
+                db.siswa.upsert({ ...targetStd, email: d.email });
+              }
+            }
+
+            db.tugasSiswa.upsert({
+              id: `ts-${assignmentId}-${sId}`,
+              tugasId: assignmentId,
+              siswaId: sId,
+              statusPengerjaan: true,
+              status: 'SELESAI',
+              score: numScore,
+              nilai: numScore,
+              submittedAt: nowIso,
+              tanggalDikerjakan: todayStr,
+              umpanBalik: 'Disinkronkan dari Google Sheet'
+            });
+
+            db.penilaian.upsert({
+              id: `as-${assignmentId}-${sId}`,
+              siswaId: sId,
+              mapelId: d.mapel_id || taskObj?.mapelId || 'mapel-1',
+              tipe: 'harian',
+              namaPenilaian: taskObj?.judulTugas || 'Kuis Google Form',
+              nilai: numScore,
+              deskripsiKompetensi: `Nilai kuis Google Form (${taskObj?.judulTugas || ''})`,
+              tanggalPenilaian: todayStr,
+              dinilaiOlehId: taskObj?.dibuatOlehId || 'guru-1',
+              kelas: d.kelas || taskObj?.kelas || 'Kelas 4-A'
+            });
+          }
+        });
+
+        window.dispatchEvent(new Event('penilaians-updated'));
+        window.dispatchEvent(new Event('asesmens-updated'));
+        window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'tugas_siswa' } }));
+        return {
+          success: true,
+          syncedCount: data.synced_count,
+          message: data.message || 'Sinkronisasi nilai dari Google Sheet berhasil!'
+        };
+      } else if (data.is_form_url) {
+        return {
+          success: false,
+          syncedCount: 0,
+          isFormUrl: true,
+          message: data.error || 'URL yang dimasukkan adalah Tautan Google Form, bukan Tautan Google Sheet Respon.'
+        };
+      }
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      if (errData.is_form_url) {
+        return {
+          success: false,
+          syncedCount: 0,
+          isFormUrl: true,
+          message: errData.error || 'URL yang dimasukkan adalah Tautan Google Form, bukan Tautan Google Sheet Respon.'
+        };
+      }
+    }
+
+    // 2. Client-side fallback if server endpoint cannot reach CSV directly
+    const targetUrl = googleFormOrSheetUrl || '';
+    let spreadsheetId = '';
+    const sheetMatch = targetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (sheetMatch) {
+      spreadsheetId = sheetMatch[1];
+    } else if (targetUrl.includes('/forms/d/')) {
+      return {
+        success: false,
+        syncedCount: 0,
+        isFormUrl: true,
+        message: 'Tautan yang dimasukkan adalah link Google Form. Harap masukkan Tautan Google Sheet Respon (Spreadsheet) dari Google Form Anda.'
+      };
+    }
+
+    if (!spreadsheetId) {
+      return {
+        success: false,
+        syncedCount: 0,
+        message: 'Spreadsheet ID tidak ditemukan dari URL.'
+      };
+    }
+
+    // Client-side CSV Fetch
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv`;
+    const csvRes = await fetch(csvUrl);
+    if (!csvRes.ok) {
+      return {
+        success: false,
+        syncedCount: 0,
+        message: 'Gagal mengambil CSV Google Sheet. Pastikan Google Sheet diset ke "Siapa saja yang memiliki tautan dapat melihat".'
+      };
+    }
+
+    const csvText = await csvRes.text();
+    const lines = csvText.split(/\r?\n/);
+    if (lines.length < 2) {
+      return { success: true, syncedCount: 0, message: 'Google Sheet belum memiliki data respon.' };
+    }
+
+    const students = db.siswa.getAll();
+    const tasks = db.daftarTugas.getAll();
+    const task = tasks.find(t => t.id === assignmentId);
+
+    let syncedCount = 0;
+    const nowIso = new Date().toISOString();
+    const todayStr = nowIso.split('T')[0];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      const parts = line.split(',').map(p => p.replace(/^"|"$/g, '').trim());
+      
+      let matchedStudent = null;
+      let scoreNum: number | null = null;
+
+      for (const part of parts) {
+        if (!part) continue;
+        const clean = part.toLowerCase();
+        
+        // Check for score pattern (e.g. "80 / 100" or "85")
+        if (clean.includes('/') || (!isNaN(Number(clean)) && Number(clean) <= 100 && Number(clean) >= 0 && scoreNum == null)) {
+          const firstPart = clean.split('/')[0].replace(/[^\d.]/g, '');
+          const parsed = parseFloat(firstPart);
+          if (!isNaN(parsed)) scoreNum = parsed;
+        }
+
+        // Match student
+        if (!matchedStudent) {
+          matchedStudent = students.find(s => 
+            (s.email && s.email.toLowerCase() === clean) ||
+            (s.id && s.id.toLowerCase() === clean) ||
+            (s.nisn && s.nisn === clean) ||
+            (s.namaSiswa && (s.namaSiswa.toLowerCase() === clean || s.namaSiswa.toLowerCase().includes(clean) || clean.includes(s.namaSiswa.toLowerCase())))
+          );
+        }
+      }
+
+      // Fallback matching if student not directly matched by email/name/nisn
+      if (!matchedStudent) {
+        const emailPart = parts.find(p => p && p.includes('@'))?.toLowerCase();
+        const localSubs = db.tugasSiswa.getAll().filter(ts => ts.tugasId === assignmentId);
+        if (localSubs.length > 0) {
+          const subSiswaId = localSubs[0].siswaId;
+          matchedStudent = students.find(s => s.id === subSiswaId || s.nisn === subSiswaId || (emailPart && s.email === emailPart));
+        }
+        if (!matchedStudent && students.length > 0) {
+          matchedStudent = students.find(s => !s.email || s.email.endsWith('@sd.id')) || students[0];
+        }
+
+        // Link student email if email exists in row
+        if (matchedStudent && emailPart) {
+          db.siswa.upsert({ ...matchedStudent, email: emailPart });
+        }
+      }
+
+      if (matchedStudent && scoreNum != null) {
+        // Save to Local DB tugas_siswa
+        const sub = {
+          id: `ts-${assignmentId}-${matchedStudent.id}`,
+          tugasId: assignmentId,
+          siswaId: matchedStudent.id,
+          statusPengerjaan: true,
+          status: 'SELESAI' as const,
+          score: scoreNum,
+          nilai: scoreNum,
+          submittedAt: nowIso,
+          tanggalDikerjakan: todayStr,
+          umpanBalik: 'Disinkronkan dari Google Sheet'
+        };
+        db.tugasSiswa.upsert(sub);
+
+        // Save to Local DB penilaian
+        db.penilaian.upsert({
+          id: `as-${assignmentId}-${matchedStudent.id}`,
+          siswaId: matchedStudent.id,
+          mapelId: task?.mapelId || 'mapel-1',
+          tipe: 'harian',
+          namaPenilaian: task?.judulTugas || 'Kuis Google Form',
+          nilai: scoreNum,
+          deskripsiKompetensi: `Nilai kuis Google Form (${task?.judulTugas || ''})`,
+          tanggalPenilaian: todayStr,
+          dinilaiOlehId: task?.dibuatOlehId || 'guru-1',
+          kelas: matchedStudent.kelas || task?.kelas || 'Kelas 4-A'
+        });
+
+        syncedCount++;
+      }
+    }
+
+    window.dispatchEvent(new Event('penilaians-updated'));
+    window.dispatchEvent(new Event('asesmens-updated'));
+    window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'tugas_siswa' } }));
+
+    return {
+      success: true,
+      syncedCount,
+      message: `Berhasil menyinkronkan ${syncedCount} nilai siswa.`
+    };
+
+  } catch (err: any) {
+    return {
+      success: false,
+      syncedCount: 0,
+      message: err?.message || 'Error sync Google Sheet'
+    };
+  }
+}
+
+
