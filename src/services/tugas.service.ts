@@ -2,6 +2,7 @@ import { db } from './db';
 import { getSupabaseClient, syncRowToSupabase, deleteRowFromSupabase } from './supabase';
 import { syncGoogleFormScoresFromSheet } from './googleServices';
 import { DaftarTugas, TugasSiswa, AssignmentStatus } from '../types';
+import { getWibDateString, getWibIsoString } from '../utils/dateUtils';
 
 export const tugasService = {
   async getDaftarTugas(): Promise<DaftarTugas[]> {
@@ -307,7 +308,7 @@ export const tugasService = {
   },
 
   async mulaiTugas(tugasId: string, siswaId: string): Promise<TugasSiswa> {
-    const nowIso = new Date().toISOString();
+    const nowIso = getWibIsoString();
     
     const existing = db.tugasSiswa.getAll().find(s => s.tugasId === tugasId && s.siswaId === siswaId);
     const sub: TugasSiswa = {
@@ -348,8 +349,8 @@ export const tugasService = {
       siswaId: siswaId,
       statusPengerjaan: true,
       status: 'SELESAI' as AssignmentStatus,
-      submittedAt: new Date().toISOString(),
-      tanggalDikerjakan: new Date().toISOString().split('T')[0],
+      submittedAt: getWibIsoString(),
+      tanggalDikerjakan: getWibDateString(),
       score: customScore ?? null,
       nilai: customScore ?? undefined
     };

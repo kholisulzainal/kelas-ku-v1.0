@@ -5,6 +5,39 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
 dotenv.config();
+process.env.TZ = 'Asia/Jakarta';
+
+function getWibDateString(date: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta' }).format(date);
+  } catch (e) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+}
+
+function getWibIsoString(date: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).formatToParts(date);
+
+    const get = (type: string) => parts.find(p => p.type === type)?.value || '00';
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}+07:00`;
+  } catch (e) {
+    return new Date(date).toISOString();
+  }
+}
 
 // Helper to parse score text into float
 function parseScoreText(scoreText: any): number {
@@ -190,8 +223,8 @@ async function startServer() {
         console.warn('[Webhook Google Form] Error fetching task details from Supabase:', tErr);
       }
 
-      const nowIso = new Date().toISOString();
-      const todayStr = nowIso.split('T')[0];
+      const nowIso = getWibIsoString();
+      const todayStr = getWibDateString();
 
       // Targets: record for studentId and also emailPrefix / cleanEmail if different
       const targetStudentIds = Array.from(new Set([studentId, emailPrefix, cleanEmail].filter(Boolean)));
@@ -460,8 +493,8 @@ async function startServer() {
 
       let syncedCount = 0;
       const syncedDetails: any[] = [];
-      const nowIso = new Date().toISOString();
-      const todayStr = nowIso.split('T')[0];
+      const nowIso = getWibIsoString();
+      const todayStr = getWibDateString();
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];

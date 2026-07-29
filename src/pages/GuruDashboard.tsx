@@ -391,27 +391,33 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       const scoreData = ingestScores[s.id];
       if (scoreData && scoreData.nilai !== '' && !isNaN(Number(scoreData.nilai))) {
         const numVal = Math.min(100, Math.max(0, Math.round(Number(scoreData.nilai))));
+        const stdId = `as-${task.id}-${s.id}`;
         const newAsesmen: Asesmen = {
-          id: `as-gform-${task.id}-${s.id}`,
+          id: stdId,
           siswaId: s.id,
           mapelId: task.mapelId,
           tipe: 'harian',
-          namaPenilaian: `Google Form: ${task.judulTugas}`,
+          namaPenilaian: task.judulTugas,
           nilai: numVal,
           deskripsiKompetensi: scoreData.deskripsi || `Hasil penilaian Kuis Google Form: ${task.judulTugas}`,
           tanggalPenilaian: new Date().toISOString().split('T')[0],
           dinilaiOlehId: currentUser?.id || 'guru-1',
           kelas: s.kelas
         };
-        db.asesmen.upsert(newAsesmen);
-        syncRowToSupabase('asesmen', newAsesmen).catch(err => console.warn(err));
+
+        // Remove old duplicate id if it existed
+        const oldGformId = `as-gform-${task.id}-${s.id}`;
+        db.penilaian.delete(oldGformId);
+
+        db.penilaian.upsert(newAsesmen);
         savedCount++;
       }
     });
 
-    setAsesmens(db.asesmen.getAll());
+    setAsesmens(db.penilaian.getAll());
+    window.dispatchEvent(new Event('penilaians-updated'));
     window.dispatchEvent(new Event('asesmens-updated'));
-    window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'asesmen' } }));
+    window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: 'penilaian' } }));
 
     setIngestNotice(`Berhasil memasukkan ${savedCount} nilai siswa ke Data Nilai Asesmen Harian!`);
     setTimeout(() => {

@@ -665,18 +665,18 @@ REKAPITULASI NILAI ASESMEN & KOMPETENSI:
 
           // Insert into local Asesmen db
           const mockAsesmen: Asesmen = {
-            id: `as-form-${Date.now()}-${matchingStudent.id}`,
+            id: `as-${task.id}-${matchingStudent.id}`,
             siswaId: matchingStudent.id,
             mapelId: task.mapelId,
             tipe: 'harian',
-            namaPenilaian: `Google Form: ${task.judulTugas}`,
+            namaPenilaian: task.judulTugas,
             nilai: score,
             deskripsiKompetensi: `Disinkronkan otomatis dari Google Form pada tanggal ${new Date().toLocaleDateString('id-ID')}`,
             tanggalPenilaian: new Date().toISOString().split('T')[0],
             dinilaiOlehId: 'guru-01'
           };
 
-          db.asesmen.upsert(mockAsesmen);
+          db.penilaian.upsert(mockAsesmen);
           matchCount++;
         }
       });

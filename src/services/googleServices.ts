@@ -4,6 +4,7 @@
 import { db } from './db';
 import { syncRowToSupabase } from './supabase';
 import { Siswa } from '../types';
+import { getWibDateString, getWibIsoString } from '../utils/dateUtils';
 
 // Storage keys for persisting user authentication and consent states
 const TOKEN_STORAGE_KEY = 'google_workspace_access_token';
@@ -840,8 +841,8 @@ export async function syncGoogleFormScoresFromSheet(
         // Sync server details to local DB
         const details = data.data || data.synced_rows || data.synced_details || [];
         const taskObj = db.daftarTugas.getAll().find(t => t.id === assignmentId);
-        const nowIso = new Date().toISOString();
-        const todayStr = nowIso.split('T')[0];
+        const nowIso = getWibIsoString();
+        const todayStr = getWibDateString();
 
         details.forEach((d: any) => {
           const sId = d.student_id;
@@ -957,8 +958,8 @@ export async function syncGoogleFormScoresFromSheet(
     const task = tasks.find(t => t.id === assignmentId);
 
     let syncedCount = 0;
-    const nowIso = new Date().toISOString();
-    const todayStr = nowIso.split('T')[0];
+    const nowIso = getWibIsoString();
+    const todayStr = getWibDateString();
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];

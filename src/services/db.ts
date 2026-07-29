@@ -18,6 +18,7 @@ import {
 } from '../types';
 import { syncRowToSupabase, deleteRowFromSupabase, saveOperatorCredentialsToSupabase } from './supabase';
 import { uploadFileToSupabaseStorage } from './storage.service';
+import { getWibDateString, getWibIsoString } from '../utils/dateUtils';
 
 // Empty default data structures (No hardcoded dummy/sample records)
 const defaultProfilSekolah: ProfilSekolah = {
@@ -641,7 +642,8 @@ export const db = {
 
       const task = db.daftarTugas.getAll().find(t => t.id === tugasId);
       const finalScore = customScore != null ? customScore : undefined;
-      const nowIso = new Date().toISOString();
+      const nowIso = getWibIsoString();
+      const todayStr = getWibDateString();
 
       // Find all matching indices for candidate student IDs
       const matchingIndices: number[] = [];
@@ -662,7 +664,7 @@ export const db = {
         status: 'SELESAI',
         startedAt: existingStartedAt || nowIso,
         submittedAt: nowIso,
-        tanggalDikerjakan: nowIso.split('T')[0],
+        tanggalDikerjakan: todayStr,
         nilai: finalScore,
         score: finalScore ?? null,
         umpanBalik: finalScore != null ? 'Tugas diselesaikan melalui Google Form (Nilai tersinkron otomatis).' : 'Tugas dikirim. Menunggu sinkronisasi nilai dari Webhook Google Form.'
@@ -685,7 +687,7 @@ export const db = {
           namaPenilaian: task.judulTugas || 'Kuis Google Form',
           nilai: finalScore,
           deskripsiKompetensi: `Nilai dari pengerjaan tugas ${task.judulTugas || ''}`,
-          tanggalPenilaian: nowIso.split('T')[0],
+          tanggalPenilaian: todayStr,
           dinilaiOlehId: task.dibuatOlehId || 'guru-1',
           kelas: student?.kelas || task.kelas || 'Kelas 4-A'
         });
@@ -755,7 +757,24 @@ export const db = {
         console.warn('Error computing automatic Penilaian from tugasSiswa:', err);
       }
 
-      return list;
+      // Deduplicate list: normalize as-gform- and as-form- to standard as- IDs
+      const uniqueMap = new Map<string, Penilaian>();
+      for (const item of list) {
+        const normId = (item.id || '').replace('as-gform-', 'as-').replace('as-form-', 'as-');
+        const normName = (item.namaPenilaian || '').replace(/^Google Form:\s*/i, '');
+        const normItem: Penilaian = {
+          ...item,
+          id: normId,
+          namaPenilaian: normName
+        };
+
+        const existing = uniqueMap.get(normId);
+        if (!existing || (!item.id.includes('as-gform-') && !item.id.includes('as-form-'))) {
+          uniqueMap.set(normId, normItem);
+        }
+      }
+
+      return Array.from(uniqueMap.values());
     },
     save: (items: Penilaian[]) => {
       localStorage.setItem('penilaian', JSON.stringify(items));
