@@ -1,13 +1,13 @@
 # 📚 KELAS KU (Aplikasi Manajemen Sekolah & LMS Digital)
 
-> **Dokumen Kontrol Alur Database, Arsitektur Sistem, dan Panduan Monitoring Bug**  
-> *Versi Rilis: 2.5.0 | Framework: React 18 + Vite + Express + Supabase PostgreSQL*
+> **Dokumen Kontrol Alur Database, Arsitektur Sistem, dan Panduan Penggunaan & Instalasi**  
+> *Versi Rilis: 2.6.0 | Framework: React 18 + Vite + Express + Supabase PostgreSQL | Timezone: WIB (Asia/Jakarta)*
 
 ---
 
 ## 1. 📐 BLUEPRINT APLIKASI & KERANGKA DASAR
 
-**KELAS KU** adalah platform School Management System (SMS) dan Learning Management System (LMS) modern yang dirancang untuk sekolah tingkat SD, SMP, SMA, dan SMK di Indonesia. Sistem ini menggabungkan manajemen akademik sekolah dengan pelacakan tugas otomatis via Google Form Webhook.
+**KELAS KU** adalah platform *School Management System* (SMS) dan *Learning Management System* (LMS) modern yang dirancang khusus untuk sekolah tingkat SD, SMP, SMA, dan SMK di Indonesia. Sistem ini mengintegrasikan manajemen akademik sekolah, penilaian kurikulum, presensi harian, serta pelacakan nilai tugas otomatis via Google Form Webhook secara real-time.
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -16,13 +16,15 @@
 |   +-------------------+    +--------------------+    +------------------------+   |
 |   |   Portal Siswa    |    |    Portal Guru     |    |   Portal Admin/Kepsek  |   |
 |   +-------------------+    +--------------------+    +------------------------+   |
+|                            |  Portal Orang Tua  |                                 |
+|                            +--------------------+                                 |
 +------------------------------------------+----------------------------------------+
                                            |
                                      HTTP / REST API
                                            v
 +-----------------------------------------------------------------------------------+
 |                                  BACKEND SERVER                                   |
-|                          Node.js + Express (Port 3000)                            |
+|                  Node.js + Express (Port 3000) [TZ: Asia/Jakarta]                |
 |  +--------------------+   +-----------------------+   +------------------------+  |
 |  | /api/webhooks/gform|   | /api/sync/supabase    |   | /api/health            |  |
 |  +--------------------+   +-----------------------+   +------------------------+  |
@@ -39,83 +41,94 @@
 ```
 
 ### Stack Teknologi Utama:
-* **Frontend UI**: React 18, Vite, Tailwind CSS, Lucide React, Canvas Confetti.
-* **Backend Runtime**: Node.js, Express JS, TSX / ESBuild CJS bundler.
-* **Database Layer**: Supabase PostgreSQL (Aturan RLS enabled, fallback local persistent DB jika offline).
-* **Integrasi Eksternal**: Google Apps Script (GAS) Webhook untuk kuis Google Form, Google Docs/Drive generator.
+* **Frontend UI**: React 18, Vite, Tailwind CSS, Lucide Icons, Canvas Confetti.
+* **Backend Runtime**: Node.js, Express JS, TSX / ESBuild CJS bundler (`dist/server.cjs`).
+* **Database Layer**: Supabase PostgreSQL (Row Level Security & Real-time Broadcast) dengan fallback *Local Persistence DB* (Offline-first support).
+* **Integrasi Eksternal**: Google Apps Script (GAS) Webhook untuk kuis Google Form, Google Workspace Generator (Docs/Drive).
+* **Standar Waktu**: WIB (Asia/Jakarta / UTC+7) tersinkronisasi presisi antara Server, Webhook, dan Supabase.
 
 ---
 
-## 2. 👥 FUNGSI HAK AKSES AKUN, HALAMAN, DAN MANAJEMEN MENU
+## 2. 👥 PETUNJUK PENGGUNA & HAK AKSES PER ROLE
 
-### 👨‍🎓 1. Akun Siswa (Role: `STUDENT`)
-* **Halaman Beranda Siswa**:
-  * **Kartu Ringkasan**: Menampilkan statistik kehadiran, jumlah tugas belum dikerjakan, dan nilai rata-rata.
-  * **Tugas & Kuis**: Menampilkan daftar tugas dengan status: `BELUM_DIKERJAKAN`, `SEDANG_MENGERJAKAN`, dan `SELESAI`.
-  * **Tombol "Kerjakan Tugas"**: Membuka Google Form tertanam di dalam modal iframe yang aman.
-  * **Tombol "Refresh Status Webhook"**: Memeriksa pembaruan nilai kuis yang dikirim otomatis oleh Google Form.
-  * **Jadwal Pelajaran Siswa**: Menampilkan jadwal harian sesuai kelas siswa.
-  * **Presensi Mandiri / Scan QR**: Memungkinkan siswa melakukan absensi masuk/pulang.
+### 👨‍🎓 1. Panduan untuk Siswa (Role: `STUDENT`)
+* **Dasbor & Ringkasan Akademik**:
+  * Menampilkan statistik kehadiran, tugas aktif, dan rekap nilai rata-rata.
+* **Mengerjakan Tugas & Kuis Google Form**:
+  * Klik **"Kerjakan Tugas"** untuk membuka kuis Google Form di dalam pengerjaan tertanam (iframe).
+  * Status tugas berubah dari `BELUM_DIKERJAKAN` menjadi `SEDANG_MENGERJAKAN`.
+  * Setelah mengirimkan Form, nilai kuis akan tersinkronisasi otomatis secara real-time via Webhook dan berubah status menjadi `SELESAI`.
+* **Lihat Nilai & Rapor**:
+  * Menampilkan riwayat nilai harian, kuis, formatif, dan sumatif beserta umpan balik dari guru.
+* **Presensi Mandiri / Scan QR**:
+  * Siswa dapat melakukan presensi masuk dan pulang secara cepat.
 
-### 👨‍🏫 2. Akun Guru (Role: `TEACHER`)
-* **Dasbor Guru**:
-  * **Manajemen Tugas & Google Form**: Membuat tugas baru, memasukkan link Google Form, dan mengunduh skrip Google Apps Script terintegrasi.
-  * **Input Nilai Manual & Asesmen**: Guru dapat memasukkan, mengubah, dan mengunci nilai siswa (Formatif/Sumatif/Kuis) langsung dari dasbor guru.
-  * **Manajemen Presensi Kelas**: Mencatat kehadiran harian siswa (Hadir, Izin, Sakit, Alpa) dan mencetak rekapitulasi.
-  * **Temuan Khusus & Karakter**: Mencatat perilaku positif maupun pelanggaran karakter siswa beserta tindak lanjutnya.
+### 👨‍🏫 2. Panduan untuk Guru (Role: `TEACHER`)
+* **Manajemen Tugas & Google Form**:
+  * Buat tugas baru dan tautkan link Google Form.
+  * Gunakan modal **"Salin Skrip Webhook"** untuk mengunduh kode Google Apps Script yang siap dipasang di Google Form / Sheets.
+* **Sinkronisasi & Ingest Nilai**:
+  * Nilai kuis dari Google Form terintegrasi tanpa duplikasi ID.
+  * Guru dapat mengklik tombol **"Sync Form / Simpan"** untuk mengimpor dan memperbarui nilai kuis secara massal.
+* **Matrix Nilai & Asesmen**:
+  * Penginputan nilai Formatif, Sumatif Lingkup Materi, dan Sumatif Akhir Semester (SAS).
+  * Edit dan kunci nilai langsung dengan pembaruan otomatis ke portal Siswa dan Orang Tua.
+* **Manajemen Kehadiran & Catatan Karakter**:
+  * Catat presensi harian (Hadir, Izin, Sakit, Alpa) dan temuan khusus perilaku siswa.
 
-### 🏫 3. Akun Admin / Kepala Sekolah (Role: `ADMIN` / `KEPSEK`)
-* **Dasbor Kepala Sekolah / Admin**:
-  * **Profil Sekolah**: Mengedit Identitas Sekolah, NPSN, Alamat, Logo, Nama Kepala Sekolah, dan NIP.
-  * **Manajemen Guru & Tendik**: Tambah, edit, nonaktifkan, dan atur mata pelajaran yang diampu guru.
-  * **Manajemen Siswa & Kelas**: Import data siswa via Excel/CSV, kenaikan kelas, dan penataan NISN.
-  * **Kalender Akademik & Agenda**: Mengatur libur sekolah, ujian nasional/daerah, dan kegiatan tahunan.
-  * **Ekspor & Cetak Laporan**: Ekspor Laporan Rapor, Rekap Absensi, dan Rekap Nilai ke format Excel / PDF / Google Docs.
+### 👨‍👩‍👧 3. Panduan untuk Orang Tua (Role: `PARENT`)
+* **Pemantauan Nilai & Perkembangan**:
+  * Orang tua dapat memantau perolehan nilai kuis dan tugas harian anak secara terorganisir.
+* **Monitoring Kehadiran**:
+  * Rekapitulasi absensi harian dan riwayat jam masuk/pulang anak di sekolah.
+* **Catatan Karakter & Pengumuman**:
+  * Menerima catatan pembiasaan/karakter dari guru serta pengumuman resmi sekolah.
 
----
-
-## 3. 🔄 ALUR KERJA APLIKASI PER USER
-
-### Alur Kerja Siswa:
-1. Siswa login menggunakan NISN/Email.
-2. Siswa melihat daftar tugas pada kelasnya.
-3. Siswa menekan **"Kerjakan Tugas"** -> Status berubah menjadi `SEDANG_MENGERJAKAN`.
-4. Siswa mengisi Google Form yang terbuka di modal interaktif.
-5. Setelah mengirimkan Form, Google Apps Script pemicu (`onFormSubmit`) secara otomatis mengirimkan webhook payload berisi `student_email`, `assignment_id`, dan `score_text` ke backend `/api/webhooks/google-form`.
-6. Status tugas siswa otomatis ter-update menjadi `SELESAI` dan nilainya tersimpan di Supabase table `student_assignments`.
-
-### Alur Kerja Guru:
-1. Guru membuat Tugas di Dasbor Guru -> Sistem menghasilkan `ID Tugas` unik.
-2. Guru menekan tombol **"Salin Skrip Webhook (Apps Script)"** dan menempelkannya di Google Sheets / Google Form kuis terkait.
-3. Guru memasang pemicu *On form submit* di Apps Script.
-4. Guru memantau rekap nilai siswa yang masuk secara real-time di tabel rekapitulasi nilai guru.
-5. Guru dapat mengedit atau memberi skor nilai susulan secara manual.
+### 🏫 4. Panduan untuk Admin / Kepala Sekolah (Role: `ADMIN` / `KEPSEK`)
+* **Pengaturan Profil Sekolah**:
+  * Kelola nama sekolah, NPSN, logo, alamat, nama Kepala Sekolah, dan NIP.
+* **Data Master Guru & Siswa**:
+  * Tambah/edit data guru, mata pelajaran yang diampu, serta import massal data siswa via Excel/CSV.
+* **Kalender Akademik & Laporan**:
+  * Penjadwalan agenda libur dan ujian, serta cetak Laporan Rapor & Rekapitulasi Sekolah (Excel/PDF).
 
 ---
 
-## 4. ⚙️ SISTEM MANAJEMEN MODUL KELAS KU
+## 3. 🔄 ALUR KERJA INTEGRASI GOOGLE FORM & WEBHOOK
 
-| Modul | Deskripsi & Entitas Database |
+1. **Pembuatan Tugas**: Guru membuat tugas kuis Google Form di Dasbor Guru -> Sistem menghasilkan `ID Tugas` unik (contoh: `tugas-1785329248256`).
+2. **Pemasangan Script**: Guru menyalin kode Google Apps Script dari modal aplikasi dan menempelkannya pada Google Sheets/Form kuis.
+3. **Pengiriman Jawaban**: Siswa menyelesaikan Google Form -> Trigger `onFormSubmit` di Apps Script berjalan secara otomatis.
+4. **Proses Webhook Backend**:
+   * Endpoint `/api/webhooks/google-form` menerima payload berisi email/NISN siswa, ID tugas, dan nilai.
+   * Sistem menormalisasi ID Penilaian menjadi ID standar tunggal (`as-{tugasId}-{siswaId}`) untuk **mencegah duplikasi nilai**.
+   * Nilai dan timestamp waktu lokal WIB (Asia/Jakarta) disimpan ke tabel `tugas_siswa` dan `penilaian` di Supabase & Local DB.
+5. **Real-Time Event Dispatch**: Frontend mendeteksi event `penilaians-updated` dan `asesmens-updated`, sehingga nilai siswa langsung diperbarui di portal Guru, Siswa, dan Orang Tua tanpa reload halaman.
+
+---
+
+## 4. ⚙️ STRUKTUR DATABASE SUPABASE & MAPPING TABEL
+
+| Nama Tabel Supabase | Deskripsi & Fungsi |
 | :--- | :--- |
-| **Profil Sekolah** | Menyimpan profil dasar sekolah, tahun ajaran aktif, semester (Ganjil/Genap), dan kop surat resmi. |
-| **Manajemen Guru** | Pendataan NIP, NUPTK, Jabatan, Email, Mapel diampu, serta nomor kontak. |
-| **Manajemen Siswa** | Pendataan NIS/NISN, Nama, Kelas, Jenis Kelamin, Orang Tua, dan status aktif. |
-| **Manajemen Pelajaran & Jadwal** | Pemetaan Mata Pelajaran, Kelompok Kurikulum (Merdeka/K13), Jam Pelajaran, dan Ruangan. |
-| **Manajemen Absensi** | Pencatatan kehadiran real-time harian & per jam pelajaran dengan persentase kehadiran otomatis. |
-| **Manajemen Nilai & Asesmen** | Penilaian Formatif, Sumatif Lingkup Materi, Sumatif Akhir Semester (SAS), dan Nilai Rapor. |
-| **Manajemen Tugas Siswa** | Pelacakan integrasi tugas kuis Google Form, status pengerjaan, dan waktu submit. |
-| **Temuan Khusus / Karakter** | Jurnal perkembangan karakter siswa (catatan kedisiplinan, prestasi, dan bimbingan). |
-| **Kalender Akademik** | Penjadwalan kegiatan sekolah, jadwal libur, dan agenda rapat/kegiatan kelas. |
+| `profil_sekolah` | Menyimpan profil dasar sekolah, NPSN, semester aktif, dan kop surat. |
+| `data_guru` | Data NIP, nama guru, mata pelajaran diampu, dan kredensial login. |
+| `data_siswa` | Data NISN, nama siswa, kelas, jenis kelamin, dan data orang tua. |
+| `daftar_tugas` | Informasi tugas, judul, deskripsi, tenggat waktu, dan link Google Form. |
+| `tugas_siswa` | Status pengerjaan tugas (`BELUM_DIKERJAKAN`, `SEDANG_MENGERJAKAN`, `SELESAI`), waktu submit (WIB), dan nilai kuis. |
+| `penilaian` | Rekapitulasi nilai harian, kuis Google Form, formatif, dan sumatif siswa. |
+| `presensi_siswa` | Catatan kehadiran harian siswa (Hadir, Sakit, Izin, Alpa) dan waktu scan QR. |
+| `catatan_karakter` | Jurnal temuan khusus perkembangan perilaku dan kedisiplinan siswa. |
 
 ---
 
-## 5. 🛠️ PETUNJUK INSTALASI & DEPLOYMENT LENGKAP
+## 5. 💻 PETUNJUK INSTALASI & DEPLOYMENT
 
-### 💻 A. Instalasi di Localhost (PC / Laptop)
+### 🛠️ A. Instalasi di Lingkungan Localhost
 
-**Prasyarat**: Node.js versi 18.x atau lebih baru, NPM/Yarn.
+**Prasyarat**: Node.js (v18.x atau v20.x), NPM.
 
-1. **Clone / Extract Proyek**:
+1. **Clone Proyek**:
    ```bash
    git clone <repository-url>
    cd kelas-ku
@@ -127,85 +140,49 @@
    ```
 
 3. **Konfigurasi Environment Variables (`.env`)**:
-   Buat file `.env` di root direktori:
+   Buat file `.env` di root direktori proyek:
    ```env
    PORT=3000
+   TZ=Asia/Jakarta
    VITE_SUPABASE_URL=https://<project-ref>.supabase.co
    VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
    GEMINI_API_KEY=your-gemini-api-key
    ```
 
-4. **Jalankan Aplikasi Mode Development**:
+4. **Jalankan Aplikasi Mode Dev**:
    ```bash
    npm run dev
    ```
-   Akses aplikasi melalui browser di `http://localhost:3000`.
+   Buka browser di `http://localhost:3000`.
 
 ---
 
-### 🌐 B. Deploy di Cloud & Hosting (Vercel / Cloud Run / VPS)
+### 🌐 B. Deployment Production (Cloud Run / VPS / Vercel)
 
-#### 1. Deployment via Cloud Run / Docker Container:
-Proyek ini sudah dilengkapi dengan `server.ts` Express yang mendukung Vite SSR/Static serving.
-* Command Build: `npm run build`
-* Command Start: `npm start` (menjalankan `node dist/server.cjs` pada port `3000`).
+Proyek ini dikompilasi menggunakan bundler ESBuild untuk server Express CommonJS (`dist/server.cjs`):
 
-#### 2. Deployment via Vercel / Netlify:
-* Set **Build Command**: `npm run build`
-* Set **Output Directory**: `dist`
-* Masukkan `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` di Environment Variables dashboard Vercel.
+1. **Build Production**:
+   ```bash
+   npm run build
+   ```
+   *Perintah ini akan menjalankan `vite build` dan mengompilasi `server.ts` menjadi `dist/server.cjs`.*
 
----
-
-### 🗄️ C. Koneksi Database Supabase (PostgreSQL)
-
-1. Buat proyek baru di [Supabase Dashboard](https://supabase.com).
-2. Jalankan SQL Query Skema dari file modal skrip aplikasi pada **SQL Editor** Supabase:
-   * Tabel yang dibuat: `profile_sekolah`, `data_guru`, `data_siswa`, `data_mapel`, `jadwal_pelajaran`, `student_assignments`, `tugas_siswa`, `presensi_siswa`, `catatan_karakter`.
-3. Aktifkan **Row Level Security (RLS)** dan buat policy perizinan read/write publik untuk lingkungan sekolah.
-4. Salun **Project URL** dan **Anon Key** ke `.env`.
+2. **Jalankan Production Server**:
+   ```bash
+   npm start
+   ```
+   *Aplikasi akan berjalan di port `3000` dengan dukungan waktu lokal WIB.*
 
 ---
 
-### 🌐 D. Kustomisasi Domain
+## 6. 📜 LISENSI & KETENTUAN HAK CIPTA
 
-1. Buka pengaturan DNS pada penyedia domain Anda (Cloudflare, Niagahoster, Rumahweb, dll.).
-2. Tambahkan **A Record** mengarah ke IP Server VPS / Cloud Run Anda, atau **CNAME Record** mengarah ke `cname.vercel-dns.com` jika menggunakan Vercel.
-3. Aktifkan SSL / HTTPS otomatis via Let's Encrypt atau SSL bawaan Vercel/Cloudflare.
-
----
-
-## 6. 📜 PERSETUJUAN PENGGUNA & LISENSI
-
-### Persetujuan Pengguna (Terms of Use):
-1. **Keamanan Data Nilai**: Hak akses pengisian dan pengubahan nilai kuis/asesmen siswa sepenuhnya milik Guru dan Administrator Sekolah. Siswa dilarang keras mencoba memanipulasi atau mengisi nilai secara manual.
-2. **Kerahasiaan Akun**: Setiap pengguna bertanggung jawab menjaga kerahasiaan kata sandi/NISN/NIP masing-masing.
-3. **Penggunaan Webhook**: Integrasi Google Apps Script hanya boleh digunakan untuk pengiriman nilai otomatis dari Google Form resmi sekolah.
-
-### Lisensi (MIT License):
 ```
 MIT License
 
-Hak Cipta (c) 2026 KELAS KU - Sistem Manajemen Sekolah Digital.
+Hak Cipta (c) 2026 KELAS KU - Sistem Manajemen Sekolah & LMS Digital.
 
 Dengan ini diberikan izin, secara gratis, kepada siapa pun yang memperoleh salinan
 perangkat lunak ini dan file dokumentasi terkait ("Perangkat Lunak"), untuk menggunakan,
 mengubah, menggabungkan, memublikasikan, mendistribusikan, dan/atau menjual salinan Perangkat Lunak.
 ```
-
----
-
-## 7. 📌 PANDUAN MONITORING BUG & INTEGRASI WEBHOOK
-
-> **TROUBLESHOOTING UTAMA WEBHOOK GOOGLE FORM**:
-> 
-> Jika log Google Apps Script menunjukkan respon HTML `<!doctype html>` dengan pesan `Cookie check` atau `Action required to load your app`:
-> * **Penyebab**: URL `ais-dev-...` / Preview AI Studio berada di belakang proteksi Cookie Sandbox browser yang menolak request server-to-server otomatis `UrlFetchApp`.
-> * **Solusi Production**:
->   1. Jalankan aplikasi pada domain publik (Hosting / Vercel / Cloud Run / Domain Kustom).
->   2. Atau kirim data langsung dari Apps Script ke Rest API Supabase `student_assignments` menggunakan `SUPABASE_KEY` langsung.
->   3. Gunakan tombol **Fungsi Uji Coba (`testKirimWebhook`)** pada editor Apps Script untuk memverifikasi respon `HTTP 200 SUCCESS`.
-
----
-
-*File `README.md` ini berfungsi sebagai acuan baku struktur database, alur kerja sistem, dan pedoman monitoring aplikasi KELAS KU.*
