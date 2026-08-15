@@ -22,13 +22,21 @@ interface AsesmenMatrixTableProps {
   activeClassFilter: string;
   loggedInUserId?: string;
   isCurrentGuruWaliKelas?: boolean;
+  isGuruMapel?: boolean;
+  isRealWaliKelas?: boolean;
+  loggedInGuru?: any;
+  myMapelIds?: string[];
 }
 
 export function AsesmenMatrixTable({
   currentRole,
   activeClassFilter,
   loggedInUserId,
-  isCurrentGuruWaliKelas
+  isCurrentGuruWaliKelas,
+  isGuruMapel,
+  isRealWaliKelas,
+  loggedInGuru,
+  myMapelIds
 }: AsesmenMatrixTableProps) {
   const [siswas, setSiswas] = useState<Siswa[]>(() => db.siswa.getAll());
   const [mapels, setMapels] = useState<MataPelajaran[]>(() => db.mataPelajaran.getAll());
@@ -63,12 +71,25 @@ export function AsesmenMatrixTable({
     return matchClass && matchSearch;
   });
 
-  // Filter subjects based on selected mapel or teacher permissions
-  const filteredMapels = mapels.filter(m => {
-    if (selectedMapelId !== 'Semua' && m.id !== selectedMapelId) return false;
-    if (currentRole === 'guru' && !isCurrentGuruWaliKelas) {
-      return m.guruPengampuId === loggedInUserId;
+  // All subjects allowed for this user role
+  const availableMapels = mapels.filter(m => {
+    if (isGuruMapel || (currentRole === 'guru' && !isCurrentGuruWaliKelas)) {
+      if (myMapelIds && myMapelIds.length > 0) {
+        return myMapelIds.includes(m.id);
+      }
+      if (loggedInGuru?.mataPelajaranUtama) {
+        const lowerSubject = m.namaMapel.toLowerCase();
+        const lowerGuruMapel = loggedInGuru.mataPelajaranUtama.toLowerCase();
+        return m.guruPengampuId === loggedInUserId || m.guruPengampuId === loggedInGuru.id || lowerSubject.includes(lowerGuruMapel);
+      }
+      return m.guruPengampuId === loggedInUserId || m.guruPengampuId === loggedInGuru?.id;
     }
+    return true;
+  });
+
+  // Filter subjects based on selected mapel or teacher permissions
+  const filteredMapels = availableMapels.filter(m => {
+    if (selectedMapelId !== 'Semua' && m.id !== selectedMapelId) return false;
     return true;
   });
 
@@ -378,8 +399,8 @@ export function AsesmenMatrixTable({
             onChange={(e) => setSelectedMapelId(e.target.value)}
             className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold"
           >
-            <option value="Semua">Semua Mata Pelajaran</option>
-            {mapels.map(m => (
+            <option value="Semua">Semua Mapel Saya ({availableMapels.length})</option>
+            {availableMapels.map(m => (
               <option key={m.id} value={m.id}>{m.namaMapel}</option>
             ))}
           </select>

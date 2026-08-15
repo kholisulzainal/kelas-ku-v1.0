@@ -740,7 +740,7 @@ export function NotificationCenter({ isOpen, onClose, currentRole, currentUserId
 
             {/* Sticky Footer Info */}
             <div className="p-4 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/40 text-center text-[9px] text-slate-400 font-semibold uppercase tracking-widest">
-              Kelas Ku V1.0 © 2026
+              Kelas Ku v2.0 2026 © 2026
             </div>
           </motion.div>
         </>

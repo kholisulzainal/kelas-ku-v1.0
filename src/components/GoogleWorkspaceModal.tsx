@@ -812,7 +812,7 @@ REKAPITULASI NILAI ASESMEN & KOMPETENSI:
             </div>
 
             <p style="margin-top: 30px; font-size: 12px; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 15px;">
-              Email ini dikirim secara resmi dan otomatis melalui Aplikasi Kelas Ku V1.0 Kurikulum Merdeka.
+              Email ini dikirim secara resmi dan otomatis melalui Aplikasi Kelas Ku v2.0 2026 Kurikulum Merdeka.
             </p>
           </div>
         </div>

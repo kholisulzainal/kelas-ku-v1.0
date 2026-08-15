@@ -98,7 +98,7 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
   ])).sort();
 
   // Filters
-  const [selectedCategory, setSelectedCategory] = useState<'semua' | 'buku_siswa' | 'buku_guru' | 'buku_non_teks'>('semua');
+  const [selectedCategory, setSelectedCategory] = useState<'semua' | 'buku_siswa' | 'buku_guru' | 'buku_non_teks' | 'lkpd'>('semua');
   const [selectedKelas, setSelectedKelas] = useState<string>(
     isManageMode ? 'Semua' : activeStudentClass
   );
@@ -115,7 +115,7 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
   // Form States
   const [formJudul, setFormJudul] = useState('');
   const [formKelas, setFormKelas] = useState('Kelas 1');
-  const [formKategoriBuku, setFormKategoriBuku] = useState<'buku_siswa' | 'buku_guru' | 'buku_non_teks'>('buku_siswa');
+  const [formKategoriBuku, setFormKategoriBuku] = useState<'buku_siswa' | 'buku_guru' | 'buku_non_teks' | 'lkpd'>('buku_siswa');
   const [formMapelNama, setFormMapelNama] = useState('Bahasa Indonesia');
   const [formFileUrl, setFormFileUrl] = useState('');
   const [formCoverUrl, setFormCoverUrl] = useState('');
@@ -186,6 +186,10 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
   };
 
   const handleDeleteBook = (id: string) => {
+    if (currentRole !== 'operator') {
+      alert('Hanya Operator yang memiliki akses untuk menghapus buku digital!');
+      return;
+    }
     if (confirm('Apakah Anda yakin ingin menghapus buku digital ini?')) {
       db.bukuDigital.delete(id);
       refreshBooks();
@@ -238,14 +242,21 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
     if (kat === 'buku_guru') {
       return (
         <span className="bg-purple-600/90 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-full backdrop-blur-md flex items-center gap-1 shadow-sm">
-          <UserCheck className="w-3 h-3" /> Buku Guru
+          <UserCheck className="w-3 h-3" /> Buku Pegangan Guru
         </span>
       );
     }
     if (kat === 'buku_non_teks') {
       return (
         <span className="bg-emerald-600/90 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-full backdrop-blur-md flex items-center gap-1 shadow-sm">
-          <BookOpen className="w-3 h-3" /> Buku Non-Teks
+          <BookOpen className="w-3 h-3" /> Buku Bacaan
+        </span>
+      );
+    }
+    if (kat === 'lkpd') {
+      return (
+        <span className="bg-amber-600/90 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-full backdrop-blur-md flex items-center gap-1 shadow-sm">
+          <FileText className="w-3 h-3" /> LKPD
         </span>
       );
     }
@@ -265,9 +276,9 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
             <BookOpen className="w-8 h-8 text-blue-300" />
           </div>
           <div>
-            <h2 className="text-xl font-black">Buku Digital &amp; Modul Belajar Kurikulum</h2>
+            <h2 className="text-xl font-black">Buku Digital, Modul Belajar &amp; LKPD</h2>
             <p className="text-xs text-blue-200 mt-0.5">
-              Koleksi Buku Teks Siswa, Buku Non-Teks/Bacaan, dan Buku Pegangan Guru (Web View PDF Reader).
+              Koleksi Buku Teks Siswa, Buku Bacaan, LKPD dan Buku Pegangan Guru.
             </p>
           </div>
         </div>
@@ -302,7 +313,7 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
               : 'text-slate-600 dark:text-slate-400 hover:text-blue-600'
           }`}
         >
-          <GraduationCap className="w-3.5 h-3.5" /> Buku Teks Siswa
+          <GraduationCap className="w-3.5 h-3.5" /> Buku Siswa
         </button>
         <button
           onClick={() => setSelectedCategory('buku_non_teks')}
@@ -312,7 +323,17 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
               : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'
           }`}
         >
-          <BookOpen className="w-3.5 h-3.5" /> Buku Non-Teks / Bacaan
+          <BookOpen className="w-3.5 h-3.5" /> Buku Bacaan
+        </button>
+        <button
+          onClick={() => setSelectedCategory('lkpd')}
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+            selectedCategory === 'lkpd'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:text-amber-600'
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5" /> LKPD
         </button>
         {isManageMode && (
           <button
@@ -323,7 +344,7 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
                 : 'text-slate-600 dark:text-slate-400 hover:text-purple-600'
             }`}
           >
-            <UserCheck className="w-3.5 h-3.5" /> Buku Pegangan Guru (Privat Guru)
+            <UserCheck className="w-3.5 h-3.5" /> Buku Pegangan Guru
           </button>
         )}
       </div>
@@ -449,13 +470,15 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={() => handleDeleteBook(book.id)}
-                      className="p-2 bg-slate-100 dark:bg-slate-800 text-red-500 hover:bg-red-100 rounded-xl cursor-pointer"
-                      title="Hapus Buku"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {currentRole === 'operator' && (
+                      <button
+                        onClick={() => handleDeleteBook(book.id)}
+                        className="p-2 bg-slate-100 dark:bg-slate-800 text-red-500 hover:bg-red-100 rounded-xl cursor-pointer"
+                        title="Hapus Buku"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -537,9 +560,10 @@ export function BukuDigitalView({ currentRole, currentUserId, studentKelas }: Bu
                   onChange={(e) => setFormKategoriBuku(e.target.value as any)}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="buku_siswa">📘 Buku Teks Siswa (Akses Semua Warga Sekolah &amp; Orang Tua)</option>
-                  <option value="buku_non_teks">📖 Buku Non-Teks / Bacaan / Cerita (Akses Semua Warga Sekolah &amp; Orang Tua)</option>
-                  <option value="buku_guru">🔒 Buku Pegangan Guru (Khusus Guru Pengampu &amp; Operator)</option>
+                  <option value="buku_siswa">📘 Buku Siswa</option>
+                  <option value="buku_non_teks">📖 Buku Bacaan</option>
+                  <option value="lkpd">📝 LKPD</option>
+                  <option value="buku_guru">🔒 Buku Pegangan Guru</option>
                 </select>
                 <p className="text-[10px] text-slate-500 mt-1">
                   Buku Pegangan Guru bersifat privat dan hanya dapat dibuka oleh akun Guru dan Operator.

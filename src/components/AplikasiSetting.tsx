@@ -21,11 +21,19 @@ import {
   BookOpen,
   UserCheck,
   AlertCircle,
-  X
+  X,
+  Palette,
+  Sun,
+  Moon,
+  Laptop,
+  Flame
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { db } from '../services/db';
+import { useTheme } from './ThemeContext';
 import { pullAllFromSupabase, getSupabaseConfig, syncRowToSupabase } from '../services/supabase';
+import { isFirebaseConfigured, getStoredFirebaseConfig } from '../services/firebase';
+import { FirebaseSettingsTab } from './FirebaseSettingsTab';
 import { exportToExcel } from '../utils/export';
 import { Guru, Siswa, Absensi, ProfilSekolah } from '../types';
 
@@ -71,6 +79,8 @@ const sortClasses = (classes: string[]): string[] => {
 };
 
 export function AplikasiSetting() {
+  const { theme, resolvedTheme, setTheme } = useTheme();
+
   // 1. Profil Sekolah State
   const [profil, setProfil] = useState<ProfilSekolah>(() => db.profilSekolah.get());
   const [isSavingProfil, setIsSavingProfil] = useState(false);
@@ -105,11 +115,13 @@ export function AplikasiSetting() {
   const [opSuccessMsg, setOpSuccessMsg] = useState('');
   const [opErrorMsg, setOpErrorMsg] = useState('');
 
-  // 4. Supabase & Backup State
+  // 4. Supabase & Firebase State
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [showFirebaseModal, setShowFirebaseModal] = useState(false);
   const supabaseConfig = getSupabaseConfig();
   const isSupabaseConfigured = Boolean(supabaseConfig.url && supabaseConfig.anonKey);
+  const hasFirebaseConfig = isFirebaseConfigured();
 
   // 5. Modal Import Result
   const [showImportResultModal, setShowImportResultModal] = useState(false);
@@ -772,6 +784,112 @@ export function AplikasiSetting() {
       </form>
 
       {/* ========================================================================= */}
+      {/* PENGATURAN TEMA TAMPILAN (THEME CONTROL)                                  */}
+      {/* ========================================================================= */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-m3-border dark:border-slate-800 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-xl">
+              <Palette className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Pengaturan &amp; Kontrol Tema Tampilan</h3>
+              <p className="text-[11px] text-slate-500">Pilih mode tampilan warna aplikasi (Terang, Gelap, atau Otomatis sesuai sistem) untuk kenyamanan penggunaan.</p>
+            </div>
+          </div>
+          <span className="text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-1 bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-full">
+            Tema Active: Mode {resolvedTheme === 'dark' ? 'Gelap' : 'Terang'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Light Theme Card */}
+          <button
+            type="button"
+            onClick={() => setTheme('light')}
+            className={`p-5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+              theme === 'light'
+                ? 'bg-amber-50/60 dark:bg-amber-950/30 border-amber-400 dark:border-amber-600 ring-2 ring-amber-400/50 shadow-sm'
+                : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-amber-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-2 bg-amber-500 text-white rounded-xl">
+                <Sun className="w-5 h-5" />
+              </div>
+              {theme === 'light' && (
+                <span className="text-[10px] font-extrabold bg-amber-600 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Aktif
+                </span>
+              )}
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Mode Terang (Light Mode)</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Latar belakang putih bersih dengan kontras tinggi, ideal untuk lingkungan dengan pencahayaan terang.
+              </p>
+            </div>
+          </button>
+
+          {/* Dark Theme Card */}
+          <button
+            type="button"
+            onClick={() => setTheme('dark')}
+            className={`p-5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+              theme === 'dark'
+                ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-400 dark:border-indigo-600 ring-2 ring-indigo-400/50 shadow-sm'
+                : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-indigo-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-2 bg-indigo-600 text-white rounded-xl">
+                <Moon className="w-5 h-5" />
+              </div>
+              {theme === 'dark' && (
+                <span className="text-[10px] font-extrabold bg-indigo-600 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Aktif
+                </span>
+              )}
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Mode Gelap (Dark Mode)</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Tampilan bernuansa gelap lembut yang mengurangi silau dan kelelahan mata di malam hari.
+              </p>
+            </div>
+          </button>
+
+          {/* System Theme Card */}
+          <button
+            type="button"
+            onClick={() => setTheme('system')}
+            className={`p-5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+              theme === 'system'
+                ? 'bg-blue-50/60 dark:bg-blue-950/40 border-blue-400 dark:border-blue-600 ring-2 ring-blue-400/50 shadow-sm'
+                : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-blue-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-2 bg-blue-600 text-white rounded-xl">
+                <Laptop className="w-5 h-5" />
+              </div>
+              {theme === 'system' && (
+                <span className="text-[10px] font-extrabold bg-blue-600 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Aktif
+                </span>
+              )}
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Otomatis (Sistem)</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Otomatis menyesuaikan dengan preferensi mode terang/gelap sistem operasi pada komputer atau smartphone Anda.
+              </p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
       {/* 2. MANAJEMEN KELAS SEKOLAH                                                */}
       {/* ========================================================================= */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-m3-border dark:border-slate-800 shadow-sm space-y-4">
@@ -1062,6 +1180,11 @@ export function AplikasiSetting() {
           <span className="text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-1 bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400 rounded-full">
             Infrastruktur #5
           </span>
+        </div>
+
+        {/* Firebase Cloud Section - Rendered directly */}
+        <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 rounded-2xl border border-amber-200 dark:border-amber-900/40 space-y-4">
+          <FirebaseSettingsTab />
         </div>
 
         <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
