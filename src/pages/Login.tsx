@@ -194,7 +194,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
           {school.namaSekolah}
         </h2>
         <p className="mt-1.5 text-xs text-[#64748B] dark:text-slate-400 font-medium">
-          Portal Akademik Terintegrasi Kurikulum Merdeka
+          Pengelolaan Kelas Kurikulum Merdeka &amp; Terintegrasi Google Apps.
         </p>
       </div>
 

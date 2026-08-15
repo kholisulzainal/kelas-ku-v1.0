@@ -42,14 +42,19 @@ import {
   ChevronDown,
   ChevronUp,
   Code,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 import { GoogleAppsScriptModal } from '../components/GoogleAppsScriptModal';
 import { AplikasiSetting } from '../components/AplikasiSetting';
 import { BukuDigitalView } from '../components/BukuDigitalView';
+import { AiTutorGuruView } from '../components/AiTutorGuruView';
+import { AiGeneratorSoalView } from '../components/AiGeneratorSoalView';
+import { AiPerangkatAjarView } from '../components/AiPerangkatAjarView';
 import { AsesmenMatrixTable } from '../components/AsesmenMatrixTable';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { db } from '../services/db';
+import { generateStandardMapelCode, extractGradeNumber } from '../utils/mapelUtils';
 import { syncRowToSupabase } from '../services/supabase';
 import { exportToCSV, exportToExcel } from '../utils/export';
 import { sendNewAssignmentEmailAlerts } from '../services/googleWorkspace';
@@ -179,7 +184,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
   const [editingItem, setEditingItem] = useState<any | null>(null);
 
   // Initialize React Hook Forms
-  const { register, handleSubmit, reset, setValue, watch } = useForm();
+  const { register, handleSubmit, reset, setValue, getValues, watch } = useForm();
 
   // New States for credentials edit & login card export
   const [showCredentialsModal, setShowCredentialsModal] = useState(false);
@@ -901,33 +906,45 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 w-full sm:w-auto">
           <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 max-w-full">
             <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap flex items-center gap-1.5 shrink-0">
-              <Unlock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              {isRealWaliKelas ? (
+                <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              ) : (
+                <Unlock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              )}
               Filter Kls:
             </span>
             <select
-              value={activeClassFilter}
-              onChange={(e) => setActiveClassFilter(e.target.value)}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-m3-purple/50 cursor-pointer min-w-[130px] sm:min-w-[160px]"
+              disabled={isRealWaliKelas}
+              value={isRealWaliKelas ? (loggedInGuru?.kelasWali || activeClassFilter) : activeClassFilter}
+              onChange={(e) => {
+                if (!isRealWaliKelas) {
+                  setActiveClassFilter(e.target.value);
+                }
+              }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-m3-purple/50 cursor-pointer min-w-[130px] sm:min-w-[160px] disabled:opacity-75 disabled:cursor-not-allowed"
             >
-              <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Semua">Semua Kls</option>
+              {!isRealWaliKelas && (
+                <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" value="Semua">Semua Kls</option>
+              )}
               {classList.map((cls) => (
                 <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold" key={cls} value={cls}>{cls}</option>
               ))}
             </select>
           </div>
           {isRealWaliKelas && (
-            <span className="text-[10px] sm:text-xs font-bold text-blue-700 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-full border border-blue-200/60 dark:border-blue-900/40">
-              Wali Kelas: {loggedInGuru?.kelasWali} {activeClassFilter === loggedInGuru?.kelasWali ? '(Aktif)' : ''}
+            <span className="text-[10px] sm:text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200/60 dark:border-amber-900/40 flex items-center gap-1">
+              <Lock className="w-3 h-3 text-amber-600" />
+              🔒 Wali Kelas Terkunci: {loggedInGuru?.kelasWali}
             </span>
           )}
           {isGuruMapel && (
             <span className="text-[10px] sm:text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 rounded-full border border-emerald-200/50 dark:border-emerald-900/30">
-              Akses Terbuka (Guru Mapel)
+              Akses Lintas Kelas (Guru Mapel: {loggedInGuru?.mataPelajaranUtama || 'Mapel'})
             </span>
           )}
           {isOperator && (
             <span className="text-[10px] sm:text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/30 px-2.5 py-1 rounded-full border border-indigo-200/50 dark:border-indigo-900/30">
-              Akses Operator (Semua)
+              Akses Operator (Semua Kelas)
             </span>
           )}
         </div>
@@ -1091,10 +1108,10 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
 
   const handleUpdateGuruCredentials = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isCurrentGuruWaliKelas) {
+    if (!loggedInGuru && !isOperator) {
       setCustomAlert({
         title: 'Gagal',
-        message: 'Hanya Guru yang menjadi Wali Kelas (Administrator) yang diperbolehkan mengubah username dan password!',
+        message: 'Pengguna tidak terautentikasi!',
         type: 'error'
       });
       return;
@@ -1529,9 +1546,22 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
       ? loggedInGuru.kelasWali 
       : (activeClassFilter !== 'Semua' ? activeClassFilter : (classList[0] || 'Kelas 4'));
     const classToAssign = data.kelas || defaultKelasMapel;
+
+    // Enforce standard mapel code rules to prevent class leaks (e.g. bin5 for Kls 5, bin6 for Kls 6)
+    let validatedKodeMapel = (data.kodeMapel || '').trim();
+    if (!validatedKodeMapel || validatedKodeMapel.startsWith('MP-')) {
+      validatedKodeMapel = generateStandardMapelCode(data.namaMapel, classToAssign);
+    } else {
+      const codeGrade = extractGradeNumber(validatedKodeMapel);
+      const targetGrade = extractGradeNumber(classToAssign);
+      if (codeGrade !== null && targetGrade !== null && codeGrade !== targetGrade) {
+        validatedKodeMapel = generateStandardMapelCode(data.namaMapel, classToAssign);
+      }
+    }
+
     const item: MataPelajaran = {
       id: editingItem?.id || `mapel-${Date.now()}`,
-      kodeMapel: data.kodeMapel,
+      kodeMapel: validatedKodeMapel,
       namaMapel: data.namaMapel,
       kkm: Number(data.kkm) || 75,
       guruPengampuId: data.guruPengampuId || loggedInUserId || gurus[0]?.id || '',
@@ -2630,10 +2660,20 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
           const namaMapel = String(findVal(['namamapel', 'mapel', 'matapelajaran', 'nama']) || '').trim();
           if (!namaMapel) return;
 
-          const kodeMapel = String(findVal(['kodemapel', 'kode']) || `MP-${Date.now().toString().slice(-4)}`).trim();
+          let kodeMapel = String(findVal(['kodemapel', 'kode']) || '').trim();
           const kkm = parseInt(String(findVal(['kkm', 'kkmstandar', 'kriteria']) || '75'), 10) || 75;
           const kelompok = String(findVal(['kelompok', 'kategori']) || 'Mata Pelajaran Utama').trim();
           const kelas = String(findVal(['kelas', 'targetkelas']) || (activeClassFilter !== 'Semua' ? activeClassFilter : 'Kelas 4')).trim();
+
+          if (!kodeMapel || kodeMapel.startsWith('MP-')) {
+            kodeMapel = generateStandardMapelCode(namaMapel, kelas);
+          } else {
+            const codeGrade = extractGradeNumber(kodeMapel);
+            const targetGrade = extractGradeNumber(kelas);
+            if (codeGrade !== null && targetGrade !== null && codeGrade !== targetGrade) {
+              kodeMapel = generateStandardMapelCode(namaMapel, kelas);
+            }
+          }
 
           const existing = db.mataPelajaran.getAll().find(m =>
             m.namaMapel.toLowerCase() === namaMapel.toLowerCase() && m.kelas === kelas
@@ -4082,15 +4122,13 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
           {loggedInGuru && (
             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm">
               <div className="flex items-center gap-3 mb-4">
-                <div className={`p-2 ${isCurrentGuruWaliKelas ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400' : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400'} rounded-xl`}>
+                <div className="p-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl">
                   <Lock className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-800 dark:text-white">Ubah Username & Password Profil Anda ({loggedInGuru.namaGuru})</h4>
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-white">Ubah Username &amp; Password Profil Anda ({loggedInGuru.namaGuru})</h4>
                   <p className="text-xs text-slate-500">
-                    {isCurrentGuruWaliKelas
-                      ? 'Gunakan NIP sebagai Username dan kata sandi unik Anda untuk login.'
-                      : '🔒 Fitur Ubah Kredensial Terkunci: Hanya Guru dengan status Wali Kelas (Administrator) yang diperbolehkan mengubah username dan password.'}
+                    Gunakan NIP/Username dan kata sandi unik Anda untuk login ke aplikasi.
                   </p>
                 </div>
               </div>
@@ -4099,10 +4137,9 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                   <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Username / NIP Anda</label>
                   <input
                     type="text"
-                    disabled={!isCurrentGuruWaliKelas}
                     value={guruNip}
                     onChange={(e) => setGuruNip(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500"
                     placeholder="NIP..."
                   />
                 </div>
@@ -4110,30 +4147,19 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                   <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Password Baru</label>
                   <input
                     type="password"
-                    disabled={!isCurrentGuruWaliKelas}
                     value={guruPassword}
                     onChange={(e) => setGuruPassword(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500"
                     placeholder="Password..."
                   />
                 </div>
                 <div>
-                  {isCurrentGuruWaliKelas ? (
-                    <button
-                      type="submit"
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-3 rounded-xl transition-all shadow-sm cursor-pointer"
-                    >
-                      Simpan Kredensial Saya
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="w-full bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold text-xs px-5 py-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 cursor-not-allowed"
-                    >
-                      Akses Terkunci
-                    </button>
-                  )}
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-3 rounded-xl transition-all shadow-sm cursor-pointer"
+                  >
+                    Simpan Kredensial Saya
+                  </button>
                 </div>
               </form>
             </div>
@@ -4141,7 +4167,7 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
 
           <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm">
             <div>
-              <h3 className="text-base font-bold text-slate-800 dark:text-white">Direktori & Profil Guru</h3>
+              <h3 className="text-base font-bold text-slate-800 dark:text-white">Direktori &amp; Profil Guru</h3>
               <p className="text-xs text-slate-500">Daftar staf pengampu pengajar kelas Kurikulum Merdeka</p>
             </div>
             {isOperator && (
@@ -4177,33 +4203,37 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {gurus.map((g) => (
-              <div
-                key={g.id}
-                className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm flex flex-col items-center text-center relative group"
-              >
-                {(isCurrentGuruWaliKelas || g.id === loggedInUserId) && (
-                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1.5">
-                    <button
-                      id={`edit_guru_${g.id}`}
-                      onClick={() => handleOpenEditModal(g)}
-                      className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 cursor-pointer"
-                      title="Edit Profil Saya"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    {isCurrentGuruWaliKelas && (
+            {gurus.map((g) => {
+              const isSelf = loggedInGuru ? (g.id === loggedInGuru.id || (g.nip && g.nip === loggedInGuru.nip)) : (g.id === loggedInUserId);
+              const canEditThisTeacher = isOperator || isSelf;
+
+              return (
+                <div
+                  key={g.id}
+                  className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm flex flex-col items-center text-center relative group"
+                >
+                  {canEditThisTeacher && (
+                    <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1.5">
                       <button
-                        id={`delete_guru_${g.id}`}
-                        onClick={() => onDeleteGuru(g.id)}
-                        className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
-                        title="Hapus Guru"
+                        id={`edit_guru_${g.id}`}
+                        onClick={() => handleOpenEditModal(g)}
+                        className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 cursor-pointer"
+                        title={isSelf ? "Edit Profil Saya" : "Edit Profil Guru"}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                    )}
-                  </div>
-                )}
+                      {isOperator && (
+                        <button
+                          id={`delete_guru_${g.id}`}
+                          onClick={() => onDeleteGuru(g.id)}
+                          className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
+                          title="Hapus Guru"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 <img
                   src={g.fotoUrl}
                   alt={g.namaGuru}
@@ -4269,8 +4299,9 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
                     )}
                   </div>
                 )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -4518,14 +4549,6 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
         <div id="students_view" className="space-y-4">
           {/* Class Filters & Creation Container */}
           {renderClassFilterBar()}
-
-          {/* Google Sheets Synchronization Dashboard Panel (Operator Only) */}
-          {isOperator && (
-            <GoogleSheetsSyncPanel 
-              onSyncSuccess={() => setSiswas(db.siswa.getAll())} 
-              activeClass={activeClassFilter} 
-            />
-          )}
 
           <div className="flex flex-wrap justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-3xl border border-m3-border dark:border-slate-800/80 shadow-sm gap-4">
             <div className="relative min-w-[280px]">
@@ -5931,9 +5954,24 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
         </div>
       )}
 
+      {/* AI TUTOR & ASISTEN PEDAGOGI GURU */}
+      {activeTab === 'ai_tutor' && (
+        <AiTutorGuruView currentUserId={loggedInUserId} />
+      )}
+
+      {/* AI GENERATOR SOAL */}
+      {activeTab === 'ai_generator_soal' && (
+        <AiGeneratorSoalView />
+      )}
+
+      {/* AI PERANGKAT AJAR */}
+      {activeTab === 'ai_perangkat_ajar' && (
+        <AiPerangkatAjarView />
+      )}
+
       {/* 10. BUKU DIGITAL & MODUL */}
       {activeTab === 'buku_digital_admin' && (
-        <BukuDigitalView currentRole="operator" currentUserId={loggedInUserId} />
+        <BukuDigitalView currentRole={isOperator ? 'operator' : 'guru'} currentUserId={loggedInUserId} />
       )}
 
       {/* 11. PENGATURAN APLIKASI OPERATOR */}
@@ -6160,8 +6198,26 @@ export function GuruDashboard({ activeTab }: GuruDashboardProps) {
             {activeTab === 'mata_pelajaran' && (
               <form onSubmit={handleSubmit(onSubmitMapel)} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Kode Mapel</label>
-                  <input type="text" disabled={!isCurrentGuruWaliKelas} {...register('kodeMapel', { required: true })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm disabled:opacity-75 disabled:cursor-not-allowed font-medium" />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-500">Kode Mapel Khusus Per Kelas</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentName = getValues('namaMapel') || 'Bahasa Indonesia';
+                        const currentKelas = getValues('kelas') || 'Kelas 6';
+                        const stdCode = generateStandardMapelCode(currentName, currentKelas);
+                        setValue('kodeMapel', stdCode);
+                      }}
+                      className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Zap className="w-3 h-3 text-amber-500" />
+                      <span>Buat Kode Standar (misal: bin6)</span>
+                    </button>
+                  </div>
+                  <input type="text" placeholder="Contoh: bin5, bin6, mat5, mat6" disabled={!isCurrentGuruWaliKelas} {...register('kodeMapel', { required: true })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm disabled:opacity-75 disabled:cursor-not-allowed font-medium" />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Aturan Database Operator: <span className="font-bold text-indigo-600 dark:text-indigo-400">bin5</span> untuk B.Indo Kelas 5, <span className="font-bold text-indigo-600 dark:text-indigo-400">bin6</span> untuk Kelas 6, <span className="font-bold text-indigo-600 dark:text-indigo-400">mat6</span> untuk MTK Kelas 6.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">Nama Mapel</label>
