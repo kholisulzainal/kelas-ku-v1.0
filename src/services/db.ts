@@ -17,7 +17,9 @@ import {
   UserRole
 } from '../types';
 import { syncRowToSupabase, deleteRowFromSupabase, saveOperatorCredentialsToSupabase } from './supabase';
+import { syncRowToFirebase, deleteRowFromFirebase } from './firebase';
 import { uploadFileToSupabaseStorage } from './storage.service';
+import { generateStandardMapelCode, extractGradeNumber } from '../utils/mapelUtils';
 import { getWibDateString, getWibIsoString } from '../utils/dateUtils';
 
 // Empty default data structures (No hardcoded dummy/sample records)
@@ -126,6 +128,18 @@ const defaultBukuDigital: BukuDigital[] = [
     deskripsi: 'Buku Panduan Guru Matematika SD Kelas 1 Kurikulum Merdeka.',
     penulis: 'Tim Gakko Tosho',
     createdAt: '2025-01-15T16:45:00.000Z'
+  },
+  {
+    id: 'book-lkpd-1-ipas',
+    judul: 'LKPD IPAS Kelas V: Lembar Kerja Praktikum Eksperimen',
+    kelas: 'Kelas 5',
+    kategoriBuku: 'lkpd',
+    mapelNama: 'IPAS',
+    fileUrl: 'https://buku.kemdikbud.go.id/catalogue/pdf/ipas-kelas-5-bs.pdf',
+    coverUrl: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=600&q=80',
+    deskripsi: 'Lembar Kerja Peserta Didik (LKPD) mandiri & kelompok untuk kegiatan pembelajaran IPAS.',
+    penulis: 'Tim Guru IPAS',
+    createdAt: '2026-02-01T08:00:00.000Z'
   }
 ];
 
@@ -234,16 +248,19 @@ export const db = {
 
   logout: () => {
     localStorage.setItem('is_logged_in', 'false');
+    window.dispatchEvent(new CustomEvent('user-session-changed'));
   },
 
   login: (role: UserRole, id: string) => {
     localStorage.setItem('is_logged_in', 'true');
     db.setCurrentUser(role, id);
+    window.dispatchEvent(new CustomEvent('user-session-changed'));
   },
 
   setCurrentUser: (role: UserRole, id: string) => {
     localStorage.setItem('current_user_role', role);
     localStorage.setItem('current_user_id', id);
+    window.dispatchEvent(new CustomEvent('user-session-changed'));
   },
 
   operatorCredentials: {
@@ -422,8 +439,31 @@ export const db = {
   mataPelajaran: {
     getAll: (): MataPelajaran[] => {
       const data = localStorage.getItem('mata_pelajaran');
-      const list: MataPelajaran[] = data ? JSON.parse(data) : [];
+      let list: MataPelajaran[] = data ? JSON.parse(data) : [];
       if (list.length === 0) return defaultMataPelajaran;
+
+      // Auto-sanitize mismatched kodeMapel vs kelas in local database
+      let updated = false;
+      list = list.map(m => {
+        if (!m.kodeMapel || m.kodeMapel.startsWith('MP-')) {
+          const stdCode = generateStandardMapelCode(m.namaMapel, m.kelas);
+          updated = true;
+          return { ...m, kodeMapel: stdCode };
+        }
+        const codeGrade = extractGradeNumber(m.kodeMapel);
+        const kelasGrade = extractGradeNumber(m.kelas);
+        if (codeGrade !== null && kelasGrade !== null && codeGrade !== kelasGrade) {
+          const stdCode = generateStandardMapelCode(m.namaMapel, m.kelas);
+          updated = true;
+          return { ...m, kodeMapel: stdCode };
+        }
+        return m;
+      });
+
+      if (updated) {
+        localStorage.setItem('mata_pelajaran', JSON.stringify(list));
+      }
+
       return list.sort((a, b) => a.namaMapel.localeCompare(b.namaMapel));
     },
     save: (items: MataPelajaran[]) => {
