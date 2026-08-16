@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ThemeProvider, useTheme } from './components/ThemeContext';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
+import { Footer } from './components/Footer';
 import { NotificationCenter } from './components/NotificationCenter';
 import { GuruDashboard } from './pages/GuruDashboard';
 import { SiswaDashboard } from './pages/SiswaDashboard';
@@ -34,12 +35,14 @@ function MainApp() {
       pullAllFromSupabase()
         .then((res) => {
           if (res.success) {
-            console.log('[Auto Sync] Pulled all tables from Supabase successfully on load.');
+            console.log(`[Auto Sync] Pulled data from Supabase successfully (${res.pulledCount ?? 0} records).`);
             window.dispatchEvent(new CustomEvent('supabase-data-updated', { detail: { tableName: '' } }));
+          } else {
+            console.warn('[Auto Sync] Notice during initial pull:', res.error);
           }
         })
         .catch((err) => {
-          console.error('[Auto Sync] Error during auto-pull on load:', err);
+          console.warn('[Auto Sync] Non-blocking network exception during initial pull:', err?.message || err);
         });
 
       // 2. Start real-time Postgres subscription channel
@@ -146,7 +149,7 @@ function MainApp() {
 
       <div className="flex flex-col lg:flex-row flex-1 relative">
         {/* Navigation Sidebar for Desktop */}
-        <aside className="hidden lg:flex flex-col w-64 shrink-0 border-r border-m3-border dark:border-slate-800/50 bg-white dark:bg-slate-950 min-h-[calc(100vh-73px)]">
+        <aside className="hidden lg:flex flex-col w-64 shrink-0 border-r border-m3-border dark:border-slate-800/50 bg-white dark:bg-slate-950 sticky top-[64px] h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar overscroll-contain">
           <Sidebar
             currentRole={currentRole}
             activeTab={activeTab}
@@ -178,7 +181,7 @@ function MainApp() {
                 className="fixed inset-y-0 left-0 z-55 w-76 max-w-[85vw] bg-white dark:bg-slate-950 shadow-2xl border-r border-m3-border dark:border-slate-800 lg:hidden flex flex-col h-full overflow-hidden"
               >
                 {/* Drawer Header inside menu */}
-                <div className="flex items-center justify-between p-5 border-b border-m3-border dark:border-slate-800/60 bg-slate-50 dark:bg-slate-900/40">
+                <div className="flex items-center justify-between p-5 border-b border-m3-border dark:border-slate-800/60 bg-slate-50 dark:bg-slate-900/40 shrink-0">
                   <span className="text-xs font-extrabold text-m3-purple dark:text-indigo-400 uppercase tracking-widest">
                     Portal Menu ({currentRole})
                   </span>
@@ -192,7 +195,7 @@ function MainApp() {
                 </div>
 
                 {/* Sidebar component inside scroll container */}
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
                   <Sidebar
                     currentRole={currentRole}
                     activeTab={activeTab}
@@ -208,19 +211,22 @@ function MainApp() {
         </AnimatePresence>
 
         {/* Dynamic Main Stage */}
-        <main className="flex-1 p-4 sm:p-6 overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`${currentRole}-${activeTab}`}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.25 }}
-              className="h-full"
-            >
-              {renderContent()}
-            </motion.div>
-          </AnimatePresence>
+        <main className="flex-1 p-3 sm:p-5 overflow-x-hidden flex flex-col justify-between min-h-[calc(100vh-64px)]">
+          <div className="flex-1">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${currentRole}-${activeTab}`}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.25 }}
+                className="h-full"
+              >
+                {renderContent()}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+          {activeTab !== 'ai_tutor_guru' && <Footer />}
         </main>
       </div>
     </div>

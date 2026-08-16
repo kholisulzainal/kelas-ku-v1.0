@@ -197,7 +197,7 @@ export interface BukuDigital {
   id: string;
   judul: string;
   kelas: string; // e.g., "Kelas 1", "Kelas 4", "Semua Kelas"
-  kategoriBuku?: 'buku_siswa' | 'buku_guru' | 'buku_non_teks';
+  kategoriBuku?: 'buku_siswa' | 'buku_guru' | 'buku_non_teks' | 'lkpd';
   mapelId?: string;
   mapelNama: string;
   fileUrl: string; // PDF URL or Google Drive embed URL
